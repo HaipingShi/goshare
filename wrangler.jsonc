@@ -1,0 +1,32 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "quickshare",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-05-20",
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  "vars": {
+    "AUTH_ENABLED": "false",
+    "AUTH_PASSWORD": "admin123",
+    "COOKIE_SECRET": "change-me-before-production"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "quickshare-db",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "CONTENT_BUCKET",
+      "bucket_name": "quickshare-content"
+    }
+  ]
+}

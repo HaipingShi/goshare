@@ -120,6 +120,33 @@ body {
   -webkit-backdrop-filter: blur(8px);
 }
 
+.admin-entry-link {
+  position: fixed;
+  top: 1.25rem;
+  right: 4.25rem;
+  z-index: 50;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  background: var(--bg-main);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  text-decoration: none;
+}
+
+.admin-entry-link:hover {
+  box-shadow: 0 0 15px rgba(var(--primary-rgb), 0.4);
+  border-color: var(--primary);
+  transform: scale(1.05);
+}
+
 .theme-toggle:hover {
   box-shadow: 0 0 15px rgba(var(--primary-rgb), 0.4);
   border-color: var(--primary);

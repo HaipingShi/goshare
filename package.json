@@ -1,41 +1,49 @@
 {
-  "name": "html-go-express",
-  "version": "1.0.0",
-  "description": "HTML代码分享工具 - Express版本",
-  "main": "app.js",
+  "name": "quickshare",
+  "version": "2.0.0",
+  "description": "HTML/Markdown/SVG/Mermaid 分享工具，支持 Cloudflare Workers、R2 和 D1 一键部署",
+  "type": "module",
+  "main": "src/worker.js",
   "scripts": {
-    "start": "NODE_ENV=production node --max-old-space-size=1024 app.js",
-    "dev": "NODE_ENV=development nodemon app.js",
-    "test": "NODE_ENV=test node app.js",
-    "prod": "NODE_ENV=production node --max-old-space-size=1024 app.js"
+    "start": "wrangler dev --local",
+    "dev": "wrangler dev --local",
+    "check": "wrangler deploy --dry-run",
+    "deploy": "npm run db:migrate:remote && wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote"
   },
   "keywords": [
     "html",
     "share",
-    "express",
-    "ejs"
+    "cloudflare-workers",
+    "r2",
+    "d1"
   ],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@mermaid-js/mermaid-cli": "^11.4.2",
-    "body-parser": "^1.20.3",
-    "cookie-parser": "^1.4.7",
-    "cors": "^2.8.5",
-    "crypto-js": "^4.2.0",
-    "dotenv": "^16.4.7",
-    "ejs": "^3.1.10",
-    "express": "^4.21.2",
-    "express-session": "^1.18.1",
-    "jsdom": "^26.0.0",
-    "marked": "^15.0.7",
-    "mermaid": "^11.6.0",
-    "mermaid-render": "^1.0.9",
-    "morgan": "^1.10.0",
-    "session-file-store": "^1.5.0",
-    "sqlite3": "^5.1.7"
+    "marked": "^15.0.7"
   },
   "devDependencies": {
-    "nodemon": "^2.0.22"
+    "wrangler": "^4.93.0"
+  },
+  "cloudflare": {
+    "bindings": {
+      "DB": {
+        "description": "D1 数据库，用于保存分享页元数据、密码保护状态和 R2 对象 key。"
+      },
+      "CONTENT_BUCKET": {
+        "description": "R2 存储桶，用于保存用户分享的 HTML/Markdown/SVG/Mermaid 原始内容。"
+      },
+      "AUTH_ENABLED": {
+        "description": "设置为 `true` 时开启首页和创建接口访问密码；默认 `false`。"
+      },
+      "AUTH_PASSWORD": {
+        "description": "登录访问密码。部署后建议在 Cloudflare 控制台改成你自己的强密码。"
+      },
+      "COOKIE_SECRET": {
+        "description": "用于签名登录 Cookie 的随机字符串。建议使用 `openssl rand -hex 32` 生成。"
+      }
+    }
   }
 }
