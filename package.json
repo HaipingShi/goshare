@@ -8,6 +8,7 @@
     "start": "wrangler dev --local",
     "dev": "wrangler dev --local",
     "check": "wrangler deploy --dry-run",
+    "capture:screenshots": "node scripts/capture-readme-screenshots.mjs",
     "deploy": "npm run db:migrate:remote && wrangler deploy",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote"
@@ -25,6 +26,7 @@
     "marked": "^15.0.7"
   },
   "devDependencies": {
+    "playwright": "^1.60.0",
     "wrangler": "^4.93.0"
   },
   "cloudflare": {
