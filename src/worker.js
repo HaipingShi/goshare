@@ -642,7 +642,7 @@ async function viewPage(request, env, id, subpath = '') {
     }
 
     const rawContent = await object.text();
-    const normalized = normalizeContentForRendering(rawContent);
+    const normalized = normalizeContentForRendering(rawContent, page.code_type);
     const renderedContent = await renderContent(normalized.content, normalized.contentType);
     const contentWithTypeInfo = injectCodeTypeMeta(renderedContent, normalized.contentType || page.code_type);
 

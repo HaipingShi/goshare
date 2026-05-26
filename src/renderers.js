@@ -131,10 +131,41 @@ export async function renderContent(content, contentType) {
   }
 }
 
-export function normalizeContentForRendering(rawContent) {
+export function normalizeContentForRendering(rawContent, expectedType) {
+  // 如果已明确预期类型是 Markdown，或者整文内容被判定为 Markdown，则不应当提取其中的代码块，而应整文渲染
+  if (expectedType === CODE_TYPES.MARKDOWN) {
+    return {
+      content: rawContent,
+      contentType: CODE_TYPES.MARKDOWN,
+    };
+  }
+
+  if (expectedType === CODE_TYPES.SVG) {
+    return {
+      content: rawContent,
+      contentType: CODE_TYPES.SVG,
+    };
+  }
+
+  if (expectedType === CODE_TYPES.MERMAID) {
+    return {
+      content: rawContent,
+      contentType: CODE_TYPES.MERMAID,
+    };
+  }
+
+  // 如果没有明确预期类型，我们先检测整文类型是否为 Markdown
+  const rawDetectedType = detectCodeType(rawContent);
+  if (rawDetectedType === CODE_TYPES.MARKDOWN) {
+    return {
+      content: rawContent,
+      contentType: CODE_TYPES.MARKDOWN,
+    };
+  }
+
   const codeBlocks = extractCodeBlocks(rawContent);
   let processedContent = rawContent;
-  let detectedType = CODE_TYPES.HTML;
+  let detectedType = expectedType || rawDetectedType;
 
   if (codeBlocks.length > 0) {
     if (codeBlocks.length === 1 && codeBlocks[0].content.length > rawContent.length * 0.7) {
@@ -144,10 +175,10 @@ export function normalizeContentForRendering(rawContent) {
       processedContent = buildMultiCodeBlockDocument(codeBlocks);
       detectedType = CODE_TYPES.HTML;
     } else {
-      detectedType = detectCodeType(rawContent);
+      detectedType = detectedType || detectCodeType(rawContent);
     }
   } else {
-    detectedType = detectCodeType(rawContent);
+    detectedType = detectedType || detectCodeType(rawContent);
 
     if (rawContent.trim().startsWith('<!DOCTYPE html>') || rawContent.trim().startsWith('<html')) {
       detectedType = CODE_TYPES.HTML;
