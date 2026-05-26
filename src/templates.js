@@ -128,12 +128,12 @@ export function renderIndexPage() {
           <textarea id="html-input" class="cyber-input" placeholder="在这里粘贴你的 HTML/Markdown/SVG/Mermaid 代码..." aria-label="HTML 代码输入区域"></textarea>
         </div>
         <div style="display: none;">
-          <input id="html-file" type="file" class="hidden" accept=".html,.htm" aria-label="上传 HTML 文件" />
+          <input id="html-file" type="file" class="hidden" accept=".html,.htm,.zip" aria-label="上传文件" />
           <p id="file-name" class="mt-3" style="color: var(--primary);"></p>
         </div>
         <div class="mt-4 flex justify-between" style="display: flex; justify-content: space-between; margin-top: 1rem;">
           <div>
-            <label for="html-file" class="cyber-btn cyber-btn-secondary tooltip micro-interaction" data-tooltip="上传HTML文件" aria-label="上传HTML文件">
+            <label for="html-file" class="cyber-btn cyber-btn-secondary tooltip micro-interaction" data-tooltip="上传 HTML 或 ZIP 文件" aria-label="上传文件">
               <i class="fas fa-file-upload mr-1" aria-hidden="true"></i>上传文件
             </label>
           </div>
@@ -529,6 +529,7 @@ export function renderAdminPage() {
               <option value="markdown">Markdown</option>
               <option value="svg">SVG</option>
               <option value="mermaid">Mermaid</option>
+              <option value="zip">ZIP (静态网页)</option>
             </select>
           </div>
           <label class="admin-inline admin-muted">

@@ -6,6 +6,7 @@ export const CODE_TYPES = {
   MARKDOWN: 'markdown',
   SVG: 'svg',
   MERMAID: 'mermaid',
+  ZIP: 'zip',
   UNKNOWN: 'unknown',
 };
 

@@ -58,6 +58,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // 创建代码编辑器
   let codeElement = null;
   let highlightEnabled = true;
+  let uploadedZipContent = null;
   
   // 初始化代码编辑器 - 简化版本，不使用双层结构
   function initCodeEditor() {
@@ -146,27 +147,40 @@ document.addEventListener('DOMContentLoaded', () => {
       const file = event.target.files[0];
       if (!file) return;
       
-      if (!file.name.endsWith('.html') && !file.name.endsWith('.htm')) {
-        showErrorToast('请上传 HTML 文件');
+      const isZip = file.name.endsWith('.zip');
+      const isHtml = file.name.endsWith('.html') || file.name.endsWith('.htm');
+      
+      if (!isHtml && !isZip) {
+        showErrorToast('请上传 HTML 或 ZIP 文件');
         return;
       }
       
       showLoading();
       fileName.textContent = file.name;
       
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const content = e.target.result;
-        htmlInput.value = content;
-        
-        // 将光标移动到文本末尾
-        htmlInput.selectionStart = htmlInput.selectionEnd = content.length;
-        
-        // 同步到高亮区域
-        syncToTextarea();
-        hideLoading();
-      };
-      reader.readAsText(file);
+      if (isZip) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          uploadedZipContent = e.target.result;
+          htmlInput.value = `[ZIP 静态网页: ${file.name}] (${(file.size / 1024).toFixed(1)} KB)\n此内容暂不支持在线编辑。点击“生成链接”即可发布此静态网站。`;
+          htmlInput.disabled = true;
+          updateCodeTypeIndicator('zip', htmlInput.value);
+          hideLoading();
+        };
+        reader.readAsDataURL(file);
+      } else {
+        uploadedZipContent = null;
+        htmlInput.disabled = false;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const content = e.target.result;
+          htmlInput.value = content;
+          htmlInput.selectionStart = htmlInput.selectionEnd = content.length;
+          syncToTextarea();
+          hideLoading();
+        };
+        reader.readAsText(file);
+      }
     });
   }
   
@@ -176,7 +190,9 @@ document.addEventListener('DOMContentLoaded', () => {
       console.log('清除按钮被点击');
       if (htmlInput) {
         htmlInput.value = '';
+        htmlInput.disabled = false;
       }
+      uploadedZipContent = null;
       if (fileName) {
         fileName.textContent = '';
       }
@@ -437,6 +453,11 @@ document.addEventListener('DOMContentLoaded', () => {
         label = 'Mermaid';
         className = 'mermaid-type';
         break;
+      case 'zip':
+        iconClass = 'fas fa-file-archive';
+        label = 'ZIP 静态网页';
+        className = 'zip-type';
+        break;
       default:
         iconClass = 'fas fa-code';
         label = 'Code';
@@ -528,8 +549,8 @@ document.addEventListener('DOMContentLoaded', () => {
       
       const htmlContent = htmlInput.value.trim();
       
-      if (!htmlContent) {
-        showErrorToast('请输入 HTML 内容');
+      if (!htmlContent && !uploadedZipContent) {
+        showErrorToast('请输入 HTML 内容或选择上传 ZIP 文件');
         return;
       }
       
@@ -545,8 +566,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const isProtected = passwordToggle ? passwordToggle.checked : false;
         
         // 检测代码类型
-        const codeType = detectCodeType(htmlContent);
+        const codeType = uploadedZipContent ? 'zip' : detectCodeType(htmlContent);
         console.log('检测到的代码类型:', codeType);
+        
+        const bodyPayload = uploadedZipContent
+          ? { zipContent: uploadedZipContent, isProtected, codeType }
+          : { htmlContent, isProtected, codeType };
         
         // 调用 API 生成链接
         const response = await fetch('/api/pages/create', {
@@ -554,7 +579,7 @@ document.addEventListener('DOMContentLoaded', () => {
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ htmlContent, isProtected, codeType }),
+          body: JSON.stringify(bodyPayload),
         });
         
         const data = await response.json();

@@ -128,6 +128,11 @@
     elements.password.textContent = page.password ? `访问密码：${page.password}` : '';
 
     setFormDisabled(false);
+
+    if (page.code_type === 'zip') {
+      elements.content.disabled = true;
+      elements.codeType.disabled = true;
+    }
   }
 
   function clearForm() {

@@ -1,3 +1,4 @@
+import * as fflate from 'fflate';
 import {
   renderErrorPage,
   renderAdminPage,
@@ -23,6 +24,7 @@ const VALID_CODE_TYPES = new Set([
   CODE_TYPES.MARKDOWN,
   CODE_TYPES.SVG,
   CODE_TYPES.MERMAID,
+  CODE_TYPES.ZIP,
 ]);
 
 export default {
@@ -125,9 +127,11 @@ async function handleRequest(request, env) {
     return validatePassword(env, validateMatch[1], url.searchParams.get('password'));
   }
 
-  const viewMatch = pathname.match(/^\/view\/([^/]+)$/);
+  const viewMatch = pathname.match(/^\/view\/([^/]+)(?:\/(.*))?$/);
   if (viewMatch && request.method === 'GET') {
-    return viewPage(request, env, viewMatch[1]);
+    const id = viewMatch[1];
+    const subpath = viewMatch[2] || '';
+    return viewPage(request, env, id, subpath);
   }
 
   if (env.ASSETS) {
@@ -168,39 +172,87 @@ async function createPage(request, env) {
   }
 
   const htmlContent = String(payload.htmlContent || '').trim();
+  const zipContent = String(payload.zipContent || '').trim();
   const isProtected = Boolean(payload.isProtected);
   const requestedCodeType = String(payload.codeType || '');
-
-  if (!htmlContent) {
-    return jsonResponse({ success: false, error: '请提供HTML内容' }, 400);
-  }
-
-  if (htmlContent.length > MAX_CONTENT_LENGTH) {
-    return jsonResponse({ success: false, error: '内容过大，请控制在10MB以内' }, 413);
-  }
 
   const codeType = VALID_CODE_TYPES.has(requestedCodeType)
     ? requestedCodeType
     : normalizeDetectedCodeType(detectCodeType(htmlContent));
+
+  if (codeType === 'zip') {
+    if (!zipContent) {
+      return jsonResponse({ success: false, error: '请提供ZIP内容' }, 400);
+    }
+    if (zipContent.length > MAX_CONTENT_LENGTH) {
+      return jsonResponse({ success: false, error: '内容过大，请控制在10MB以内' }, 413);
+    }
+  } else {
+    if (!htmlContent) {
+      return jsonResponse({ success: false, error: '请提供HTML内容' }, 400);
+    }
+    if (htmlContent.length > MAX_CONTENT_LENGTH) {
+      return jsonResponse({ success: false, error: '内容过大，请控制在10MB以内' }, 413);
+    }
+  }
+
   const password = generateRandomPassword();
   const createdAt = Date.now();
   const updatedAt = createdAt;
-  const contentHash = await sha256Hex(htmlContent);
-  const encoder = new TextEncoder();
-  const contentSize = encoder.encode(htmlContent).byteLength;
 
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const urlId = await generatePageId(htmlContent, attempt);
-    const r2Key = `pages/${urlId}.txt`;
+  let contentHash;
+  let contentSize;
+  let zipBytes = null;
+  let files = null;
+
+  if (codeType === 'zip') {
+    zipBytes = safeBase64UrlDecodeToBytes(zipContent);
+    if (!zipBytes) {
+      return jsonResponse({ success: false, error: 'ZIP内容格式错误' }, 400);
+    }
+    contentSize = zipBytes.byteLength;
+    contentHash = await sha256Hex(zipContent);
 
     try {
-      await env.CONTENT_BUCKET.put(r2Key, htmlContent, {
-        httpMetadata: { contentType: 'text/plain; charset=utf-8' },
-        customMetadata: {
-          pageId: urlId,
-          codeType,
-        },
-      });
+      files = fflate.unzipSync(zipBytes);
+    } catch (err) {
+      console.error('解压失败:', err);
+      return jsonResponse({ success: false, error: '解压 ZIP 文件失败' }, 400);
+    }
+  } else {
+    contentHash = await sha256Hex(htmlContent);
+    const encoder = new TextEncoder();
+    contentSize = encoder.encode(htmlContent).byteLength;
+  }
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const urlId = await generatePageId(codeType === 'zip' ? zipContent : htmlContent, attempt);
+    const r2Key = codeType === 'zip' ? `pages/${urlId}/index.html` : `pages/${urlId}.txt`;
+
+    try {
+      if (codeType === 'zip') {
+        // Upload each file to R2
+        for (const [filename, fileData] of Object.entries(files)) {
+          if (filename.endsWith('/') || fileData.length === 0) continue; // skip directories
+          const fileKey = `pages/${urlId}/${filename}`;
+          const contentType = getContentType(filename);
+          await env.CONTENT_BUCKET.put(fileKey, fileData, {
+            httpMetadata: { contentType },
+            customMetadata: {
+              pageId: urlId,
+              filename,
+            },
+          });
+        }
+      } else {
+        await env.CONTENT_BUCKET.put(r2Key, htmlContent, {
+          httpMetadata: { contentType: 'text/plain; charset=utf-8' },
+          customMetadata: {
+            pageId: urlId,
+            codeType,
+          },
+        });
+      }
 
       await env.DB.prepare(`
         INSERT INTO pages (id, r2_key, created_at, updated_at, owner_key, password, is_protected, code_type, content_size, content_sha256)
@@ -309,16 +361,22 @@ async function getOwnedPage(request, env, id) {
     return jsonResponse({ success: false, error: '页面不存在' }, 404);
   }
 
-  const object = await env.CONTENT_BUCKET.get(page.r2_key);
-  if (!object) {
-    return jsonResponse({ success: false, error: '内容对象不存在' }, 500);
+  let htmlContent = '';
+  if (page.code_type === 'zip') {
+    htmlContent = 'ZIP 格式内容暂不支持在线编辑。';
+  } else {
+    const object = await env.CONTENT_BUCKET.get(page.r2_key);
+    if (!object) {
+      return jsonResponse({ success: false, error: '内容对象不存在' }, 500);
+    }
+    htmlContent = await object.text();
   }
 
   return jsonResponse({
     success: true,
     page: {
       ...page,
-      htmlContent: await object.text(),
+      htmlContent,
     },
   }, 200, owner.cookieHeader ? { 'Set-Cookie': owner.cookieHeader } : {});
 }
@@ -340,6 +398,22 @@ async function updateOwnedPage(request, env, id) {
     payload = await request.json();
   } catch {
     return jsonResponse({ success: false, error: '请求格式错误' }, 400);
+  }
+
+  if (page.code_type === 'zip') {
+    // For ZIP, only allow updating protection state
+    await env.DB.prepare(`
+      UPDATE pages
+      SET updated_at = ?, is_protected = ?
+      WHERE id = ? AND owner_key = ?
+    `)
+      .bind(Date.now(), payload.isProtected ? 1 : 0, id, owner.ownerKey)
+      .run();
+
+    return jsonResponse({
+      success: true,
+      message: '保存成功 (仅更新保护状态)',
+    }, 200, owner.cookieHeader ? { 'Set-Cookie': owner.cookieHeader } : {});
   }
 
   const htmlContent = String(payload.htmlContent || '').trim();
@@ -395,7 +469,18 @@ async function deleteOwnedPage(request, env, id) {
     return jsonResponse({ success: false, error: '页面不存在' }, 404);
   }
 
-  await env.CONTENT_BUCKET.delete(page.r2_key);
+  if (page.code_type === 'zip') {
+    // List all files with prefix pages/{id}/ and delete them
+    const listed = await env.CONTENT_BUCKET.list({ prefix: `pages/${id}/` });
+    if (listed.objects && listed.objects.length > 0) {
+      for (const obj of listed.objects) {
+        await env.CONTENT_BUCKET.delete(obj.key);
+      }
+    }
+  } else {
+    await env.CONTENT_BUCKET.delete(page.r2_key);
+  }
+
   await env.DB.prepare('DELETE FROM pages WHERE id = ? AND owner_key = ?')
     .bind(id, owner.ownerKey)
     .run();
@@ -444,7 +529,7 @@ async function validatePassword(env, id, password) {
   });
 }
 
-async function viewPage(request, env, id) {
+async function viewPage(request, env, id, subpath = '') {
   assertBindings(env);
   if (!isValidId(id)) {
     return htmlResponse(renderErrorPage({
@@ -471,6 +556,37 @@ async function viewPage(request, env, id) {
         error: password ? '密码错误，请重试' : null,
       }), password ? 401 : 200);
     }
+  }
+
+  if (page.code_type === 'zip') {
+    // If request path does not end with slash and subpath is empty, redirect to /view/{id}/
+    const hasTrailingSlash = url.pathname.endsWith('/');
+    if (!hasTrailingSlash && !subpath) {
+      const redirectUrl = new URL(url.href);
+      redirectUrl.pathname = redirectUrl.pathname + '/';
+      return redirect(redirectUrl.toString());
+    }
+
+    const fileSubpath = subpath ? decodeURIComponent(subpath) : 'index.html';
+    const fileKey = `pages/${id}/${fileSubpath}`;
+    const object = await env.CONTENT_BUCKET.get(fileKey);
+    if (!object) {
+      return htmlResponse(renderErrorPage({
+        title: '文件未找到',
+        message: `您请求的文件 ${fileSubpath} 不存在`,
+      }), 404);
+    }
+
+    const fileData = await object.arrayBuffer();
+    const contentType = getContentType(fileSubpath);
+    
+    return new Response(fileData, {
+      status: 200,
+      headers: {
+        'Content-Type': contentType,
+        'Cache-Control': 'public, max-age=3600',
+      },
+    });
   }
 
   const object = await env.CONTENT_BUCKET.get(page.r2_key);
@@ -718,4 +834,61 @@ function corsHeaders() {
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
   };
+}
+
+function safeBase64UrlDecodeToBytes(value) {
+  try {
+    let base64 = value;
+    if (base64.includes(';base64,')) {
+      base64 = base64.split(';base64,')[1];
+    }
+    const padded = base64.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(base64.length / 4) * 4, '=');
+    const binary = atob(padded);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+  } catch {
+    return null;
+  }
+}
+
+function getContentType(filename) {
+  const ext = filename.split('.').pop().toLowerCase();
+  switch (ext) {
+    case 'html':
+    case 'htm':
+      return 'text/html; charset=utf-8';
+    case 'css':
+      return 'text/css; charset=utf-8';
+    case 'js':
+    case 'mjs':
+      return 'application/javascript; charset=utf-8';
+    case 'json':
+      return 'application/json; charset=utf-8';
+    case 'svg':
+      return 'image/svg+xml; charset=utf-8';
+    case 'png':
+      return 'image/png';
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'gif':
+      return 'image/gif';
+    case 'webp':
+      return 'image/webp';
+    case 'woff':
+      return 'font/woff';
+    case 'woff2':
+      return 'font/woff2';
+    case 'ttf':
+      return 'font/ttf';
+    case 'otf':
+      return 'font/otf';
+    case 'txt':
+      return 'text/plain; charset=utf-8';
+    default:
+      return 'application/octet-stream';
+  }
 }
