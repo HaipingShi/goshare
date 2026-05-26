@@ -91,6 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let codeElement = null;
   let highlightEnabled = true;
   let uploadedZipContent = null;
+  let uploadedCodeTypeOverride = null;
   
   // 初始化代码编辑器 - 简化版本，不使用双层结构
   function initCodeEditor() {
@@ -141,8 +142,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // 同步内容 - 简化版本，只更新代码类型指示器
   function syncToTextarea() {
     if (htmlInput) {
-      // 只更新代码类型指示器
-      const codeType = detectCodeType(htmlInput.value);
+      // 如果有强制覆盖的代码类型则使用它，否则调用检测函数
+      const codeType = uploadedCodeTypeOverride || detectCodeType(htmlInput.value);
       updateCodeTypeIndicator(codeType, htmlInput.value);
     }
   }
@@ -180,10 +181,15 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!file) return;
       
       const isZip = file.name.endsWith('.zip');
-      const isHtml = file.name.endsWith('.html') || file.name.endsWith('.htm');
+      const isTextFile = file.name.endsWith('.html') || 
+                         file.name.endsWith('.htm') || 
+                         file.name.endsWith('.md') || 
+                         file.name.endsWith('.markdown') || 
+                         file.name.endsWith('.svg') || 
+                         file.name.endsWith('.txt');
       
-      if (!isHtml && !isZip) {
-        showErrorToast('请上传 HTML 或 ZIP 文件');
+      if (!isTextFile && !isZip) {
+        showErrorToast('请上传 HTML、ZIP、Markdown、SVG 或 TXT 文件');
         return;
       }
       
@@ -202,6 +208,18 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.readAsDataURL(file);
       } else {
         uploadedZipContent = null;
+        
+        // 根据后缀名强制指定代码类型，避免自动检测误差
+        if (file.name.endsWith('.md') || file.name.endsWith('.markdown')) {
+          uploadedCodeTypeOverride = 'markdown';
+        } else if (file.name.endsWith('.svg')) {
+          uploadedCodeTypeOverride = 'svg';
+        } else if (file.name.endsWith('.html') || file.name.endsWith('.htm')) {
+          uploadedCodeTypeOverride = 'html';
+        } else {
+          uploadedCodeTypeOverride = null;
+        }
+        
         htmlInput.disabled = false;
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -225,6 +243,7 @@ document.addEventListener('DOMContentLoaded', () => {
         htmlInput.disabled = false;
       }
       uploadedZipContent = null;
+      uploadedCodeTypeOverride = null;
       if (fileName) {
         fileName.textContent = '';
       }
@@ -515,6 +534,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // 在输入框内容变化时检测代码类型并更新高亮
   if (htmlInput) {
     htmlInput.addEventListener('input', () => {
+      // 手动修改内容时，清除强制指定类型，恢复自动检测
+      uploadedCodeTypeOverride = null;
       const content = htmlInput.value;
       const codeType = detectCodeType(content);
       updateCodeTypeIndicator(codeType, content);
@@ -598,7 +619,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const isProtected = passwordToggle ? passwordToggle.checked : false;
         
         // 检测代码类型
-        const codeType = uploadedZipContent ? 'zip' : detectCodeType(htmlContent);
+        const codeType = uploadedZipContent ? 'zip' : (uploadedCodeTypeOverride || detectCodeType(htmlContent));
         console.log('检测到的代码类型:', codeType);
         
         const bodyPayload = uploadedZipContent
