@@ -217,7 +217,43 @@ async function createPage(request, env) {
       files = fflate.unzipSync(zipBytes);
     } catch (err) {
       console.error('解压失败:', err);
-      return jsonResponse({ success: false, error: '解压 ZIP 文件失败' }, 400);
+      return jsonResponse({ success: false, error: '解压 ZIP 文件失败，请确保压缩文件未损坏' }, 400);
+    }
+
+    // ZIP 结构校验
+    const fileKeys = Object.keys(files);
+    const hasIndexHtmlAtRoot = fileKeys.includes('index.html');
+    const hasPackageJson = fileKeys.some(f => f === 'package.json' || f.endsWith('/package.json'));
+    const anyIndexHtml = fileKeys.find(f => f === 'index.html' || f.endsWith('/index.html'));
+
+    const hasSourceIndicators = fileKeys.some(f => f.startsWith('src/') || f === 'tsconfig.json' || f === 'vite.config.ts' || f === 'webpack.config.js');
+    if (hasPackageJson && hasSourceIndicators) {
+      return jsonResponse({
+        success: false,
+        error: '检测到上传的是前端项目源码包而非编译后的产物。请先在本地运行 `npm run build`，然后将生成的 `dist` 目录内的所有文件压缩后上传。'
+      }, 400);
+    }
+
+    if (!hasIndexHtmlAtRoot) {
+      if (hasPackageJson && !anyIndexHtml) {
+        return jsonResponse({
+          success: false,
+          error: '检测到上传的是前端源码包而非编译产物。请先在本地运行 `npm run build`，然后选择生成的 `dist` 目录内的所有文件进行压缩上传。'
+        }, 400);
+      }
+      
+      if (anyIndexHtml) {
+        const folderName = anyIndexHtml.split('/')[0];
+        return jsonResponse({
+          success: false,
+          error: `入口文件 index.html 未处于压缩包最外层（当前位于 \`${folderName}/index.html\`）。请直接对 \`${folderName}\` 目录内的所有文件进行压缩，确保 index.html 处于压缩包根目录。`
+        }, 400);
+      }
+
+      return jsonResponse({
+        success: false,
+        error: 'ZIP 压缩包内未找到 `index.html` 入口文件，静态网页需要以 index.html 作为首页入口。'
+      }, 400);
     }
   } else {
     contentHash = await sha256Hex(htmlContent);

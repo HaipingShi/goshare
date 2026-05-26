@@ -174,6 +174,29 @@ export function renderIndexPage() {
         </div>
       </div>
     </div>
+    <div class="card instructions-card" style="margin-top: 1rem;">
+      <h3 style="color: var(--primary); font-family: 'Orbitron', sans-serif; margin-bottom: 0.75rem; font-size: 1.1rem; display: flex; align-items: center; gap: 8px;">
+        <i class="fas fa-info-circle"></i>使用说明与支持类型
+      </h3>
+      <div style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px;">
+        <div>
+          <h4 style="color: var(--text-primary); margin-bottom: 0.4rem; font-size: 0.9rem;">📝 代码与文档类型</h4>
+          <ul style="padding-left: 1.2rem; margin: 0;">
+            <li><strong>HTML</strong>: 支持单页面（包含内联 CSS 和 JS）</li>
+            <li><strong>Markdown</strong>: 自动渲染为美观排版的文档</li>
+            <li><strong>SVG / Mermaid</strong>: 自动渲染矢量图与流程图</li>
+          </ul>
+        </div>
+        <div>
+          <h4 style="color: var(--text-primary); margin-bottom: 0.4rem; font-size: 0.9rem;">📦 ZIP 静态网站托管</h4>
+          <ul style="padding-left: 1.2rem; margin: 0;">
+            <li>将静态网页的<b>所有内容</b>打包成 ZIP 压缩上传</li>
+            <li>压缩包的最外层<b>必须</b>包含 <code>index.html</code> 首页文件</li>
+            <li>Vite/React等项目请先配置 <code>base: './'</code> 后再编译并打包 <code>dist</code> 文件夹</li>
+          </ul>
+        </div>
+      </div>
+    </div>
   </div>
   ${appFooter()}
 </div>
