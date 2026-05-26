@@ -22,7 +22,7 @@
     {
       "binding": "DB",
       "database_name": "quickshare-db",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "fe96df7d-97e2-4cf1-a046-ffe04e86080d",
       "migrations_dir": "migrations"
     }
   ],
