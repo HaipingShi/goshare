@@ -548,16 +548,25 @@ async function viewPage(request, env, id, subpath = '') {
     }), 404);
   }
 
+  let passwordValidated = false;
   if (page.is_protected === 1) {
-    const password = url.searchParams.get('password');
+    const passwordFromUrl = url.searchParams.get('password');
+    const passwordFromCookie = getCookie(request, `quickshare_pw_${id}`);
+    const password = passwordFromUrl || passwordFromCookie;
+
     if (!password || password !== page.password) {
       return htmlResponse(renderPasswordPage({
         id,
-        error: password ? '密码错误，请重试' : null,
-      }), password ? 401 : 200);
+        error: passwordFromUrl ? '密码错误，请重试' : null,
+      }), passwordFromUrl ? 401 : 200);
+    }
+
+    if (passwordFromUrl === page.password) {
+      passwordValidated = true;
     }
   }
 
+  let response;
   if (page.code_type === 'zip') {
     // If request path does not end with slash and subpath is empty, redirect to /view/{id}/
     const hasTrailingSlash = url.pathname.endsWith('/');
@@ -580,29 +589,39 @@ async function viewPage(request, env, id, subpath = '') {
     const fileData = await object.arrayBuffer();
     const contentType = getContentType(fileSubpath);
     
-    return new Response(fileData, {
+    response = new Response(fileData, {
       status: 200,
       headers: {
         'Content-Type': contentType,
         'Cache-Control': 'public, max-age=3600',
       },
     });
+  } else {
+    const object = await env.CONTENT_BUCKET.get(page.r2_key);
+    if (!object) {
+      return htmlResponse(renderErrorPage({
+        title: '内容未找到',
+        message: '页面元数据存在，但 R2 中的内容对象不存在',
+      }), 500);
+    }
+
+    const rawContent = await object.text();
+    const normalized = normalizeContentForRendering(rawContent);
+    const renderedContent = await renderContent(normalized.content, normalized.contentType);
+    const contentWithTypeInfo = injectCodeTypeMeta(renderedContent, normalized.contentType || page.code_type);
+
+    response = htmlResponse(contentWithTypeInfo);
   }
 
-  const object = await env.CONTENT_BUCKET.get(page.r2_key);
-  if (!object) {
-    return htmlResponse(renderErrorPage({
-      title: '内容未找到',
-      message: '页面元数据存在，但 R2 中的内容对象不存在',
-    }), 500);
+  if (passwordValidated) {
+    const secure = url.protocol === 'https:' ? '; Secure' : '';
+    response.headers.append(
+      'Set-Cookie',
+      `quickshare_pw_${id}=${page.password}; Max-Age=86400; Path=/view/${id}/; HttpOnly; SameSite=Lax${secure}`
+    );
   }
 
-  const rawContent = await object.text();
-  const normalized = normalizeContentForRendering(rawContent);
-  const renderedContent = await renderContent(normalized.content, normalized.contentType);
-  const contentWithTypeInfo = injectCodeTypeMeta(renderedContent, normalized.contentType || page.code_type);
-
-  return htmlResponse(contentWithTypeInfo);
+  return response;
 }
 
 async function getPageRecord(env, id) {
