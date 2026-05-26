@@ -120,6 +120,33 @@ npx wrangler r2 bucket create quickshare-content
 npm run deploy
 ```
 
+## 绑定自定义域名
+
+Cloudflare Workers 默认分配 `*.workers.dev` 域名。如果你想使用自己的自定义域名（例如 `share.example.com`），可以通过以下两种方式之一进行绑定：
+
+### 方法 A：通过 Cloudflare 网页后台绑定（推荐，全自动）
+
+1. 登录 [Cloudflare 控制台](https://dash.cloudflare.com/)。
+2. 导航至 **Workers & Pages** -> 选择你的 Worker 应用 `quickshare`。
+3. 点击 **Settings** (设置) 选项卡 -> 选择 **Domains & Routes** (域名与路由)。
+4. 点击 **Add Custom Domain** (添加自定义域名)。
+5. 输入你的自定义域名（例如 `share.yourdomain.com`），点击保存。Cloudflare 会自动为你的域名配置 DNS 记录并申请 SSL 证书，无需手动操作。
+
+### 方法 B：通过 `wrangler.jsonc` 配置文件绑定
+
+1. 打开 [wrangler.jsonc](file:///Users/geesh/projects/tempshare/wrangler.jsonc)。
+2. 找到 `routes` 配置项（已为您添加注释示例），取消注释并填写你的域名：
+   ```json
+   "routes": [
+     { "pattern": "share.yourdomain.com/*", "custom_domain": true }
+   ]
+   ```
+3. 运行部署命令：
+   ```bash
+   npm run deploy
+   ```
+   Wrangler 会自动在你的 Cloudflare 账户中注册并绑定该域名。
+
 ## 刷新 README 截图
 
 先启动本地服务：
@@ -224,6 +251,33 @@ AUTH_ENABLED=true
 AUTH_PASSWORD=<your-strong-password>
 COOKIE_SECRET=<openssl rand -hex 32>
 ```
+
+## Custom Domain
+
+By default, Cloudflare Workers are deployed to `*.workers.dev`. If you want to use your own custom domain (e.g., `share.example.com`), you can bind it in one of two ways:
+
+### Method A: Via Cloudflare Dashboard (Recommended, Fully Automated)
+
+1. Log in to the [Cloudflare Dashboard](https://dash.cloudflare.com/).
+2. Navigate to **Workers & Pages** -> select your Worker `quickshare`.
+3. Go to the **Settings** tab -> click **Domains & Routes**.
+4. Click **Add Custom Domain**.
+5. Enter your domain (e.g., `share.yourdomain.com`) and save. Cloudflare will automatically configure DNS records and issue an SSL certificate for you.
+
+### Method B: Via `wrangler.jsonc` Configuration
+
+1. Open [wrangler.jsonc](file:///Users/geesh/projects/tempshare/wrangler.jsonc).
+2. Uncomment the `routes` block and specify your custom domain:
+   ```json
+   "routes": [
+     { "pattern": "share.yourdomain.com/*", "custom_domain": true }
+   ]
+   ```
+3. Run the deploy command:
+   ```bash
+   npm run deploy
+   ```
+   Wrangler will register the custom domain routing inside your Cloudflare account.
 
 ## Local Development
 
