@@ -33,9 +33,41 @@ function showSuccessToast(message) {
   }
 }
 
+// 智能检测警告弹窗
+function showWarningModal(title, message) {
+  const modal = document.getElementById('alert-modal');
+  const modalTitle = document.getElementById('modal-title');
+  const modalMessage = document.getElementById('modal-message');
+  if (modal && modalTitle && modalMessage) {
+    modalTitle.textContent = title;
+    // 用 <code> 替换 Markdown 的行内代码块 `code`
+    modalMessage.innerHTML = message
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\n/g, '<br>');
+    modal.classList.add('show');
+  } else {
+    console.warn('警告弹窗元素不存在，回退到 showErrorToast:', message);
+    showErrorToast(message);
+  }
+}
+
 // 使用延迟加载确保所有元素已经完全渲染好
 document.addEventListener('DOMContentLoaded', () => {
   console.log('DOM完全加载，初始化应用...');
+  
+  // 弹窗关闭事件
+  const alertModal = document.getElementById('alert-modal');
+  const modalCloseBtn = document.getElementById('modal-close-btn');
+  if (alertModal && modalCloseBtn) {
+    modalCloseBtn.addEventListener('click', () => {
+      alertModal.classList.remove('show');
+    });
+    alertModal.addEventListener('click', (e) => {
+      if (e.target === alertModal) {
+        alertModal.classList.remove('show');
+      }
+    });
+  }
   
   // DOM 元素
   const htmlInput = document.getElementById('html-input');
@@ -661,7 +693,14 @@ document.addEventListener('DOMContentLoaded', () => {
         loadingIndicator.classList.remove('show');
       } catch (error) {
         console.error('生成链接错误:', error);
-        showErrorToast('生成链接时发生错误');
+        
+        // 如果是 ZIP 文件的校验提示，使用警告弹窗展示，方便用户阅读；否则展示 toast
+        const msg = error.message || '生成链接时发生错误';
+        if (msg.includes('源码') || msg.includes('编译') || msg.includes('压缩') || msg.includes('index.html')) {
+          showWarningModal('ZIP 智能检测提示', msg);
+        } else {
+          showErrorToast(msg);
+        }
         
         // 恢复按钮状态
         generateButton.innerHTML = '<i class="fas fa-link mr-1"></i>生成链接';

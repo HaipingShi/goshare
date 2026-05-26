@@ -78,6 +78,21 @@ function chromeEnd({ includeMain = true, includeAdminLink = false, includeAdmin 
         <span id="success-message" class="toast-message"></span>
       </div>
     </div>
+    <!-- 智能检测与警告弹窗 -->
+    <div id="alert-modal" class="modal-overlay">
+      <div class="modal-card">
+        <div class="modal-header">
+          <i class="fas fa-exclamation-triangle modal-warn-icon"></i>
+          <h3 id="modal-title" class="modal-title">警告提示</h3>
+        </div>
+        <div class="modal-body" id="modal-message">
+          <!-- 动态注入警告信息 -->
+        </div>
+        <div class="modal-footer">
+          <button id="modal-close-btn" class="cyber-btn cyber-btn-primary">我知道了</button>
+        </div>
+      </div>
+    </div>
   </div>
   <script src="https://cdn.jsdelivr.net/npm/particles.js@2.0.0/particles.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
@@ -174,25 +189,25 @@ export function renderIndexPage() {
         </div>
       </div>
     </div>
-    <div class="card instructions-card" style="margin-top: 1rem;">
-      <h3 style="color: var(--primary); font-family: 'Orbitron', sans-serif; margin-bottom: 0.75rem; font-size: 1.1rem; display: flex; align-items: center; gap: 8px;">
-        <i class="fas fa-info-circle"></i>使用说明与支持类型
+    <div class="card instructions-card">
+      <h3 class="instructions-title">
+        <i class="fas fa-info-circle"></i> 使用说明与支持类型
       </h3>
-      <div style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px;">
-        <div>
-          <h4 style="color: var(--text-primary); margin-bottom: 0.4rem; font-size: 0.9rem;">📝 代码与文档类型</h4>
-          <ul style="padding-left: 1.2rem; margin: 0;">
-            <li><strong>HTML</strong>: 支持单页面（包含内联 CSS 和 JS）</li>
-            <li><strong>Markdown</strong>: 自动渲染为美观排版的文档</li>
-            <li><strong>SVG / Mermaid</strong>: 自动渲染矢量图与流程图</li>
+      <div class="instructions-grid">
+        <div class="instructions-col">
+          <h4 class="instructions-col-title">📝 代码与文档类型</h4>
+          <ul class="instructions-list">
+            <li><strong>HTML</strong>: 支持单页面（包含内联 CSS 和 JS）直接渲染</li>
+            <li><strong>Markdown</strong>: 自动解析并渲染为美观排版的文档</li>
+            <li><strong>SVG / Mermaid</strong>: 自动渲染为矢量图形、流程图与图表</li>
           </ul>
         </div>
-        <div>
-          <h4 style="color: var(--text-primary); margin-bottom: 0.4rem; font-size: 0.9rem;">📦 ZIP 静态网站托管</h4>
-          <ul style="padding-left: 1.2rem; margin: 0;">
-            <li>将静态网页的<b>所有内容</b>打包成 ZIP 压缩上传</li>
-            <li>压缩包的最外层<b>必须</b>包含 <code>index.html</code> 首页文件</li>
-            <li>Vite/React等项目请先配置 <code>base: './'</code> 后再编译并打包 <code>dist</code> 文件夹</li>
+        <div class="instructions-col">
+          <h4 class="instructions-col-title">📦 ZIP 静态网站托管</h4>
+          <ul class="instructions-list">
+            <li>将静态网页的<b>所有构建产物</b>打包成 ZIP 格式压缩上传</li>
+            <li>压缩包最外层根目录<b>必须</b>包含 <code>index.html</code> 首页入口文件</li>
+            <li>Vite/React 等项目请先在构建配置中设置 <code>base: './'</code>，然后运行 <code>npm run build</code> 构建打包，最后将 <code>dist</code> 文件夹下的<b>所有内容</b>直接压缩后上传（不要包含源码文件夹 <code>src</code> 或外层 <code>dist</code> 文件夹本身）</li>
           </ul>
         </div>
       </div>
