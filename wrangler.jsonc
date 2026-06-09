@@ -10,9 +10,9 @@
     "directory": "./public",
     "binding": "ASSETS"
   },
-  // "routes": [
-  //   { "pattern": "share.yourdomain.com/*", "custom_domain": true }
-  // ],
+  "routes": [
+    { "pattern": "goshare.ilihe.shop", "custom_domain": true }
+  ],
   "vars": {
     "AUTH_ENABLED": "false",
     "AUTH_PASSWORD": "admin123",
