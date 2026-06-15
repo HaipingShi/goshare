@@ -118,6 +118,112 @@ npm run check
 
 这个命令会执行 `wrangler deploy --dry-run`，用于确认 Worker 配置、模块入口和绑定没有明显问题。
 
+## Agent API
+
+给 vibe coding agent 或其他自动化工具设置一个长期 Bearer Token 后，可以不经过 UI，直接用 HTTP API 创建分享页。
+
+本地开发可在 `.dev.vars` 中设置：
+
+```txt
+AGENT_API_TOKEN=<replace-with-agent-api-token>
+```
+
+生产环境建议使用 Cloudflare Secret：
+
+```bash
+npx wrangler secret put AGENT_API_TOKEN
+```
+
+创建分享页：
+
+```bash
+curl -X POST "https://your-share-domain.example/api/agent/pages" \
+  -H "Authorization: Bearer $AGENT_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "# Hello goshare\n\nCreated by an agent.",
+    "codeType": "markdown",
+    "markdownTheme": "github",
+    "isProtected": false
+  }'
+```
+
+成功响应会包含 `success`、`url`、`urlId`、`runId`、`status` 和 `logs`：
+
+```json
+{
+  "success": true,
+  "url": "https://your-share-domain.example/view/abc1234",
+  "urlId": "abc1234",
+  "runId": "run_1234567890abcdef12",
+  "status": "completed",
+  "logs": [
+    { "level": "info", "message": "agent_request_authenticated" },
+    { "level": "info", "message": "page_created" }
+  ]
+}
+```
+
+OpenAPI 最小片段：
+
+```yaml
+paths:
+  /api/agent/pages:
+    post:
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                htmlContent:
+                  type: string
+                zipContent:
+                  type: string
+                codeType:
+                  type: string
+                  enum: [html, markdown, svg, mermaid, zip]
+                markdownTheme:
+                  type: string
+                  enum: [bytedance, github, docs]
+                isProtected:
+                  type: boolean
+      responses:
+        "201":
+          description: Page created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, url, urlId, runId, status, logs]
+                properties:
+                  success:
+                    type: boolean
+                  url:
+                    type: string
+                  urlId:
+                    type: string
+                  runId:
+                    type: string
+                  status:
+                    type: string
+                    enum: [completed]
+                  logs:
+                    type: array
+                    items:
+                      type: object
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+```
+
 ## 手动部署
 
 不使用 Deploy Button 时，可以自己创建资源：
@@ -325,6 +431,90 @@ Run a dry deployment check:
 
 ```bash
 npm run check
+```
+
+## Agent API
+
+Set `AGENT_API_TOKEN` to let coding agents create share pages over HTTP without using the UI.
+
+```bash
+npx wrangler secret put AGENT_API_TOKEN
+```
+
+Create a page:
+
+```bash
+curl -X POST "https://your-share-domain.example/api/agent/pages" \
+  -H "Authorization: Bearer $AGENT_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "# Hello goshare\n\nCreated by an agent.",
+    "codeType": "markdown",
+    "markdownTheme": "github",
+    "isProtected": false
+  }'
+```
+
+The JSON response includes `success`, `url`, `urlId`, `runId`, `status`, and `logs`.
+
+Minimal OpenAPI snippet:
+
+```yaml
+paths:
+  /api/agent/pages:
+    post:
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                htmlContent:
+                  type: string
+                zipContent:
+                  type: string
+                codeType:
+                  type: string
+                  enum: [html, markdown, svg, mermaid, zip]
+                markdownTheme:
+                  type: string
+                  enum: [bytedance, github, docs]
+                isProtected:
+                  type: boolean
+      responses:
+        "201":
+          description: Page created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, url, urlId, runId, status, logs]
+                properties:
+                  success:
+                    type: boolean
+                  url:
+                    type: string
+                  urlId:
+                    type: string
+                  runId:
+                    type: string
+                  status:
+                    type: string
+                    enum: [completed]
+                  logs:
+                    type: array
+                    items:
+                      type: object
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
 ```
 
 Refresh README screenshots:

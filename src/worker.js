@@ -91,6 +91,10 @@ async function handleRequest(request, env) {
     });
   }
 
+  if (pathname === '/api/agent/pages' && request.method === 'POST') {
+    return createAgentPage(request, env);
+  }
+
   if (pathname === '/api/pages/create' && request.method === 'POST') {
     if (!(await isAuthenticated(request, env))) return unauthorizedJson();
     return createPage(request, env);
@@ -200,17 +204,106 @@ async function createPage(request, env) {
   assertBindings(env);
   const owner = await getOwnerContext(request, env);
 
-  let payload;
+  const payload = await readJsonPayload(request);
+  if (!payload.ok) return payload.response;
+
+  const result = await createSharePageFromPayload(payload.data, env, {
+    ownerKey: owner.ownerKey,
+  });
+  if (!result.ok) return createPageErrorResponse(result);
+
+  return jsonResponse({
+    success: true,
+    urlId: result.page.urlId,
+    password: result.page.password,
+    isProtected: result.page.isProtected,
+  }, 200, owner.cookieHeader ? { 'Set-Cookie': owner.cookieHeader } : {});
+}
+
+async function createAgentPage(request, env) {
+  assertBindings(env);
+  const auth = await authenticateAgentRequest(request, env);
+  if (!auth.ok) return auth.response;
+
+  const runId = await generateAgentRunId();
+  const logs = [];
+  let runStarted = false;
+
   try {
-    payload = await request.json();
-  } catch {
-    return jsonResponse({ success: false, error: '请求格式错误' }, 400);
+    await createAgentRunRecord(env, runId, auth.agentKey);
+    runStarted = true;
+    await appendAgentRunLog(env, runId, logs, 'info', 'agent_request_authenticated');
+
+    const payload = await readJsonPayload(request);
+    if (!payload.ok) {
+      return finishAgentRunWithFailure(env, runId, logs, '请求格式错误', 400);
+    }
+    await appendAgentRunLog(env, runId, logs, 'info', 'create_payload_received');
+
+    const result = await createSharePageFromPayload(payload.data, env, {
+      ownerKey: auth.ownerKey,
+    });
+    if (!result.ok) {
+      return finishAgentRunWithFailure(env, runId, logs, result.error, result.status);
+    }
+
+    const url = buildShareUrl(request, env, result.page.urlId);
+    await appendAgentRunLog(env, runId, logs, 'info', 'page_created', {
+      url,
+      urlId: result.page.urlId,
+      codeType: result.page.codeType,
+      markdownTheme: result.page.markdownTheme,
+      isProtected: result.page.isProtected,
+      contentSize: result.page.contentSize,
+    });
+    await updateAgentRunStatus(env, runId, 'completed', result.page.urlId, null);
+    await appendAgentRunLog(env, runId, logs, 'info', 'agent_run_completed');
+
+    return jsonResponse({
+      success: true,
+      url,
+      urlId: result.page.urlId,
+      runId,
+      status: 'completed',
+      logs,
+    }, 201);
+  } catch (error) {
+    console.error('Agent API 创建页面错误:', error);
+    if (runStarted) {
+      try {
+        await appendAgentRunLog(env, runId, logs, 'error', 'agent_run_failed', {
+          error: 'Agent API 执行失败',
+        });
+        await updateAgentRunStatus(env, runId, 'failed', null, 'Agent API 执行失败');
+      } catch (logError) {
+        console.error('Agent API run 记录失败:', logError);
+      }
+    }
+
+    return jsonResponse({
+      success: false,
+      runId,
+      status: 'failed',
+      error: 'Agent API 执行失败',
+      logs,
+    }, 500);
+  }
+}
+
+async function createSharePageFromPayload(payload, env, options = {}) {
+  const ownerKey = String(options.ownerKey || '');
+  if (!ownerKey) {
+    return createPageError('缺少 owner 信息', 500);
   }
 
-  const htmlContent = String(payload.htmlContent || '').trim();
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return createPageError('请求格式错误', 400);
+  }
+
+  const htmlContent = String(payload.htmlContent ?? payload.content ?? '').trim();
   const zipContent = String(payload.zipContent || '').trim();
   const isProtected = Boolean(payload.isProtected);
-  const requestedCodeType = String(payload.codeType || '');
+  const requestedCodeType = String(payload.codeType || '').trim().toLowerCase();
 
   const codeType = VALID_CODE_TYPES.has(requestedCodeType)
     ? requestedCodeType
@@ -219,19 +312,19 @@ async function createPage(request, env) {
     ? normalizeMarkdownTheme(payload.markdownTheme)
     : normalizeMarkdownTheme();
 
-  if (codeType === 'zip') {
+  if (codeType === CODE_TYPES.ZIP) {
     if (!zipContent) {
-      return jsonResponse({ success: false, error: '请提供ZIP内容' }, 400);
+      return createPageError('请提供ZIP内容', 400);
     }
     if (zipContent.length > MAX_CONTENT_LENGTH) {
-      return jsonResponse({ success: false, error: '内容过大，请控制在10MB以内' }, 413);
+      return createPageError('内容过大，请控制在10MB以内', 413);
     }
   } else {
     if (!htmlContent) {
-      return jsonResponse({ success: false, error: '请提供HTML内容' }, 400);
+      return createPageError('请提供HTML内容', 400);
     }
     if (htmlContent.length > MAX_CONTENT_LENGTH) {
-      return jsonResponse({ success: false, error: '内容过大，请控制在10MB以内' }, 413);
+      return createPageError('内容过大，请控制在10MB以内', 413);
     }
   }
 
@@ -244,10 +337,10 @@ async function createPage(request, env) {
   let zipBytes = null;
   let files = null;
 
-  if (codeType === 'zip') {
+  if (codeType === CODE_TYPES.ZIP) {
     zipBytes = safeBase64UrlDecodeToBytes(zipContent);
     if (!zipBytes) {
-      return jsonResponse({ success: false, error: 'ZIP内容格式错误' }, 400);
+      return createPageError('ZIP内容格式错误', 400);
     }
     contentSize = zipBytes.byteLength;
     contentHash = await sha256Hex(zipContent);
@@ -256,7 +349,7 @@ async function createPage(request, env) {
       files = fflate.unzipSync(zipBytes);
     } catch (err) {
       console.error('解压失败:', err);
-      return jsonResponse({ success: false, error: '解压 ZIP 文件失败，请确保压缩文件未损坏' }, 400);
+      return createPageError('解压 ZIP 文件失败，请确保压缩文件未损坏', 400);
     }
 
     // ZIP 结构校验
@@ -267,32 +360,20 @@ async function createPage(request, env) {
 
     const hasSourceIndicators = fileKeys.some(f => f.startsWith('src/') || f === 'tsconfig.json' || f === 'vite.config.ts' || f === 'webpack.config.js');
     if (hasPackageJson && hasSourceIndicators) {
-      return jsonResponse({
-        success: false,
-        error: '检测到上传的是前端项目源码包而非编译后的产物。请先在本地运行 `npm run build`，然后将生成的 `dist` 目录内的所有文件压缩后上传。'
-      }, 400);
+      return createPageError('检测到上传的是前端项目源码包而非编译后的产物。请先在本地运行 `npm run build`，然后将生成的 `dist` 目录内的所有文件压缩后上传。', 400);
     }
 
     if (!hasIndexHtmlAtRoot) {
       if (hasPackageJson && !anyIndexHtml) {
-        return jsonResponse({
-          success: false,
-          error: '检测到上传的是前端源码包而非编译产物。请先在本地运行 `npm run build`，然后选择生成的 `dist` 目录内的所有文件进行压缩上传。'
-        }, 400);
+        return createPageError('检测到上传的是前端源码包而非编译产物。请先在本地运行 `npm run build`，然后选择生成的 `dist` 目录内的所有文件进行压缩上传。', 400);
       }
       
       if (anyIndexHtml) {
         const folderName = anyIndexHtml.split('/')[0];
-        return jsonResponse({
-          success: false,
-          error: `入口文件 index.html 未处于压缩包最外层（当前位于 \`${folderName}/index.html\`）。请直接对 \`${folderName}\` 目录内的所有文件进行压缩，确保 index.html 处于压缩包根目录。`
-        }, 400);
+        return createPageError(`入口文件 index.html 未处于压缩包最外层（当前位于 \`${folderName}/index.html\`）。请直接对 \`${folderName}\` 目录内的所有文件进行压缩，确保 index.html 处于压缩包根目录。`, 400);
       }
 
-      return jsonResponse({
-        success: false,
-        error: 'ZIP 压缩包内未找到 `index.html` 入口文件，静态网页需要以 index.html 作为首页入口。'
-      }, 400);
+      return createPageError('ZIP 压缩包内未找到 `index.html` 入口文件，静态网页需要以 index.html 作为首页入口。', 400);
     }
   } else {
     contentHash = await sha256Hex(htmlContent);
@@ -301,14 +382,13 @@ async function createPage(request, env) {
   }
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
-    const urlId = await generatePageId(codeType === 'zip' ? zipContent : htmlContent, attempt);
-    const r2Key = codeType === 'zip' ? `pages/${urlId}/index.html` : `pages/${urlId}.txt`;
+    const urlId = await generatePageId(codeType === CODE_TYPES.ZIP ? zipContent : htmlContent, attempt);
+    const r2Key = codeType === CODE_TYPES.ZIP ? `pages/${urlId}/index.html` : `pages/${urlId}.txt`;
 
     try {
-      if (codeType === 'zip') {
-        // Upload each file to R2
+      if (codeType === CODE_TYPES.ZIP) {
         for (const [filename, fileData] of Object.entries(files)) {
-          if (filename.endsWith('/') || fileData.length === 0) continue; // skip directories
+          if (filename.endsWith('/') || fileData.length === 0) continue;
           const fileKey = `pages/${urlId}/${filename}`;
           const contentType = getContentType(filename);
           await env.CONTENT_BUCKET.put(fileKey, fileData, {
@@ -333,24 +413,159 @@ async function createPage(request, env) {
         INSERT INTO pages (id, r2_key, created_at, updated_at, owner_key, password, is_protected, code_type, markdown_theme, content_size, content_sha256)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
-        .bind(urlId, r2Key, createdAt, updatedAt, owner.ownerKey, password, isProtected ? 1 : 0, codeType, markdownTheme, contentSize, contentHash)
+        .bind(urlId, r2Key, createdAt, updatedAt, ownerKey, password, isProtected ? 1 : 0, codeType, markdownTheme, contentSize, contentHash)
         .run();
 
-      return jsonResponse({
-        success: true,
-        urlId,
-        password,
-        isProtected,
-      }, 200, owner.cookieHeader ? { 'Set-Cookie': owner.cookieHeader } : {});
+      return {
+        ok: true,
+        page: {
+          urlId,
+          password,
+          isProtected,
+          codeType,
+          markdownTheme,
+          contentSize,
+          contentHash,
+        },
+      };
     } catch (error) {
       console.error('创建页面错误:', error);
       if (attempt === 4) {
-        return jsonResponse({ success: false, error: '创建页面失败' }, 500);
+        return createPageError('创建页面失败', 500);
       }
     }
   }
 
-  return jsonResponse({ success: false, error: '创建页面失败' }, 500);
+  return createPageError('创建页面失败', 500);
+}
+
+function createPageError(error, status) {
+  return {
+    ok: false,
+    error,
+    status,
+  };
+}
+
+function createPageErrorResponse(result) {
+  return jsonResponse({
+    success: false,
+    error: result.error,
+  }, result.status || 500);
+}
+
+async function finishAgentRunWithFailure(env, runId, logs, error, statusCode = 500) {
+  await appendAgentRunLog(env, runId, logs, 'error', 'agent_run_failed', { error });
+  await updateAgentRunStatus(env, runId, 'failed', null, error);
+
+  return jsonResponse({
+    success: false,
+    runId,
+    status: 'failed',
+    error,
+    logs,
+  }, statusCode);
+}
+
+async function authenticateAgentRequest(request, env) {
+  const expectedToken = getAgentApiToken(env);
+  if (!expectedToken) {
+    return {
+      ok: false,
+      response: jsonResponse({
+        success: false,
+        status: 'not_configured',
+        error: 'Agent API 未配置 AGENT_API_TOKEN',
+      }, 503),
+    };
+  }
+
+  const authHeader = String(request.headers.get('Authorization') || '');
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!match) {
+    return {
+      ok: false,
+      response: jsonResponse({
+        success: false,
+        status: 'unauthorized',
+        error: '请提供 Bearer Token',
+      }, 401, { 'WWW-Authenticate': 'Bearer realm="goshare-agent"' }),
+    };
+  }
+
+  const providedToken = match[1].trim();
+  const providedHash = await sha256Hex(providedToken);
+  const expectedHash = await sha256Hex(expectedToken);
+  if (!constantTimeEqual(providedHash, expectedHash)) {
+    return {
+      ok: false,
+      response: jsonResponse({
+        success: false,
+        status: 'unauthorized',
+        error: 'Bearer Token 无效',
+      }, 401, { 'WWW-Authenticate': 'Bearer realm="goshare-agent"' }),
+    };
+  }
+
+  return {
+    ok: true,
+    agentKey: await sha256Hex(`agent:${expectedToken}`),
+    ownerKey: await sha256Hex(`agent-owner:${expectedToken}`),
+  };
+}
+
+function getAgentApiToken(env) {
+  return String(env.AGENT_API_TOKEN || '').trim();
+}
+
+async function createAgentRunRecord(env, runId, agentKey) {
+  const createdAt = Date.now();
+  await env.DB.prepare(`
+    INSERT INTO agent_runs (id, created_at, updated_at, status, agent_key)
+    VALUES (?, ?, ?, ?, ?)
+  `)
+    .bind(runId, createdAt, createdAt, 'running', agentKey)
+    .run();
+}
+
+async function updateAgentRunStatus(env, runId, status, pageId, error) {
+  await env.DB.prepare(`
+    UPDATE agent_runs
+    SET updated_at = ?, status = ?, page_id = ?, error = ?
+    WHERE id = ?
+  `)
+    .bind(Date.now(), status, pageId, error, runId)
+    .run();
+}
+
+async function appendAgentRunLog(env, runId, logs, level, message, data) {
+  const createdAt = Date.now();
+  const sequence = logs.length;
+  const logId = await generateAgentRunLogId(runId, sequence, createdAt);
+  const dataJson = data === undefined ? null : JSON.stringify(data);
+
+  await env.DB.prepare(`
+    INSERT INTO agent_run_logs (id, run_id, sequence, created_at, level, message, data_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `)
+    .bind(logId, runId, sequence, createdAt, level, message, dataJson)
+    .run();
+
+  const log = {
+    time: new Date(createdAt).toISOString(),
+    level,
+    message,
+  };
+  if (data !== undefined) {
+    log.data = data;
+  }
+  logs.push(log);
+}
+
+function buildShareUrl(request, env, urlId) {
+  const publicSiteUrl = String(env.PUBLIC_SITE_URL || '').trim().replace(/\/+$/, '');
+  const origin = publicSiteUrl || new URL(request.url).origin;
+  return `${origin}/view/${encodeURIComponent(urlId)}`;
 }
 
 async function previewPage(request, env) {
@@ -1131,6 +1346,18 @@ async function generateSubmissionId(pageId, createdAt) {
   return `sub_${hash.slice(0, 18)}`;
 }
 
+async function generateAgentRunId() {
+  const randomToken = generateRandomToken(12);
+  const hash = await sha256Hex(`agent-run:${Date.now()}:${randomToken}`);
+  return `run_${hash.slice(0, 18)}`;
+}
+
+async function generateAgentRunLogId(runId, sequence, createdAt) {
+  const randomToken = generateRandomToken(8);
+  const hash = await sha256Hex(`${runId}:${sequence}:${createdAt}:${randomToken}`);
+  return `log_${hash.slice(0, 18)}`;
+}
+
 async function sha256Hex(value) {
   const data = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest('SHA-256', data);
@@ -1412,8 +1639,8 @@ function unauthorizedJson() {
 function corsHeaders() {
   return {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   };
 }
 

@@ -2,6 +2,7 @@ AUTH_ENABLED=false
 AUTH_PASSWORD=replace-with-a-local-password
 COOKIE_SECRET=replace-with-openssl-rand-hex-32
 COOKIE_PREFIX=goshare
+AGENT_API_TOKEN=replace-with-agent-api-token
 
 APP_NAME=goshare
 APP_DESCRIPTION=分享 AI 生成内容的最佳方式
