@@ -8,7 +8,7 @@ const rootDir = path.resolve(__dirname, '..');
 const outputDir = path.join(rootDir, 'docs', 'assets');
 const baseUrl = process.env.SCREENSHOT_URL || 'http://127.0.0.1:8787';
 
-const sampleMarkdown = `# QuickShare demo
+const sampleMarkdown = `# goshare demo
 
 把 AI 生成的 Markdown、HTML、SVG 或 Mermaid 直接粘贴进来，生成一个干净的公开链接。
 
@@ -36,6 +36,14 @@ try {
     fullPage: true,
   });
 
+  await page.locator('#preview-render-button').click();
+  await page.locator('#preview-section').waitFor({ state: 'visible' });
+  await page.frameLocator('#render-preview-frame').locator('body').waitFor({ state: 'visible' });
+  await page.locator('#generate-button').waitFor({ state: 'visible' });
+  await page.waitForFunction(() => {
+    const button = document.querySelector('#generate-button');
+    return button && !button.disabled;
+  });
   await page.locator('#generate-button').click();
   await page.locator('#result-section').waitFor({ state: 'visible' });
   await page.screenshot({

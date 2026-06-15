@@ -381,6 +381,14 @@ export function renderBootstrapPage(env) {
       .bootstrap-wide {
         grid-column: span 2;
       }
+      .bootstrap-agent-card {
+        border-color: rgba(245, 158, 11, 0.55);
+        box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.12), 0 20px 60px rgba(15, 23, 42, 0.3);
+      }
+      .bootstrap-agent-note {
+        margin: 0 0 14px;
+        color: rgba(255, 255, 255, 0.82);
+      }
       .bootstrap-form {
         display: grid;
         gap: 12px;
@@ -452,7 +460,7 @@ export function renderBootstrapPage(env) {
         }
       }
     </style>`;
-  const starterPrompt = `我想部署自己的 ${config.appName} 分享站，源码仓库是 ${config.repoUrl}，站点域名是 ${displaySiteUrl}。请一步一步引导我在 Cloudflare 上完成部署，包含 D1、R2、Workers AI、AUTH_PASSWORD、COOKIE_SECRET 和自定义域名配置。`;
+  const starterPrompt = `请作为我的 ${config.appName} Cloudflare 部署向导，逐步检查并引导我完成生产部署。源码仓库是 ${config.repoUrl}，目标站点域名是 ${displaySiteUrl}。请按顺序确认 Worker、Static Assets、R2、D1、远端 migrations、AUTH_PASSWORD、COOKIE_SECRET、AGENT_API_TOKEN、APP_LOGO_URL、PUBLIC_SITE_URL、自定义域名和 /api/agent/pages 冒烟测试。每一步先告诉我目的和风险，再给我需要执行的命令或 Cloudflare 控制台操作。`;
 
   return `${chromeStart(`${config.appName} | 自部署引导`, { htmlAttrs: 'lang="zh-CN" data-page="bootstrap-page"', extraHead, env })}
 <main class="bootstrap-shell">
@@ -502,8 +510,9 @@ export function renderBootstrapPage(env) {
       </ul>
     </article>
 
-    <article class="card bootstrap-card bootstrap-wide">
-      <h2><i class="fas fa-terminal" aria-hidden="true"></i> 给 AI 的一句话</h2>
+    <article class="card bootstrap-card bootstrap-wide bootstrap-agent-card">
+      <h2><i class="fas fa-terminal" aria-hidden="true"></i> 给 AI Agent 的部署 Prompt</h2>
+      <p class="bootstrap-agent-note">复制下面这段话给 Codex、Claude Code 或其他 coding agent，让它陪你完成 Cloudflare 生产部署和冒烟测试。</p>
       <form class="bootstrap-form" id="bootstrap-prompt-form">
         <div class="bootstrap-field">
           <label for="bootstrap-domain">我的域名</label>
@@ -524,7 +533,7 @@ export function renderBootstrapPage(env) {
         <textarea id="bootstrap-prompt" class="bootstrap-output" readonly>${escapeHtml(starterPrompt)}</textarea>
         <div class="bootstrap-actions">
           <button id="bootstrap-copy" type="button" class="cyber-btn cyber-btn-primary micro-interaction">
-            <i class="fas fa-copy mr-1" aria-hidden="true"></i>复制这句话
+            <i class="fas fa-copy mr-1" aria-hidden="true"></i>复制部署 Prompt
           </button>
           <a class="cyber-btn cyber-btn-secondary micro-interaction" href="${escapeHtml(deployUrl)}" target="_blank" rel="noopener noreferrer">
             <i class="fas fa-external-link-alt mr-1" aria-hidden="true"></i>打开部署页
@@ -540,6 +549,7 @@ npx wrangler d1 create goshare-db
 npx wrangler r2 bucket create goshare-content
 npx wrangler secret put AUTH_PASSWORD
 npx wrangler secret put COOKIE_SECRET
+npx wrangler secret put AGENT_API_TOKEN
 npm run deploy</pre>
     </article>
   </section>
@@ -564,7 +574,7 @@ ${appFooter(env)}
       const aiText = aiInput.checked ? '启用 Workers AI 美化功能' : '先不启用 AI 美化功能';
       const authText = authInput.checked ? '开启后台访问密码' : '首页暂时不加后台密码';
       const logoText = logoUrl ? '自定义 logo 地址是 ' + logoUrl + '，' : '';
-      promptInput.value = '我想部署自己的 ' + name + ' 分享站，源码仓库是 ' + repoUrl + '，站点域名是 ' + domain + '。' + logoText + '请一步一步引导我在 Cloudflare 上完成部署，包含 D1、R2、Workers AI、' + authText + '、' + aiText + '、APP_LOGO_URL、AUTH_PASSWORD、COOKIE_SECRET 和自定义域名配置。';
+      promptInput.value = '请作为我的 ' + name + ' Cloudflare 部署向导，逐步检查并引导我完成生产部署。源码仓库是 ' + repoUrl + '，目标站点域名是 ' + domain + '。' + logoText + '请按顺序确认 Worker、Static Assets、R2、D1、远端 migrations、' + authText + '、' + aiText + '、AUTH_PASSWORD、COOKIE_SECRET、AGENT_API_TOKEN、APP_LOGO_URL、PUBLIC_SITE_URL、自定义域名和 /api/agent/pages 冒烟测试。每一步先告诉我目的和风险，再给我需要执行的命令或 Cloudflare 控制台操作。';
       if (logoPreview && logoUrl) logoPreview.src = logoUrl;
     }
 

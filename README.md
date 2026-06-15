@@ -1,140 +1,119 @@
-# QuickShare Cloudflare
+<p align="center">
+  <img src="docs/assets/goshare-logo.png" alt="goshare logo" width="148">
+</p>
 
-> 把 AI 生成的 HTML、Markdown、SVG、Mermaid 变成一个干净链接，部署在你自己的 Cloudflare 账号里。
-> Paste AI-generated HTML, Markdown, SVG, or Mermaid and share it from your own Cloudflare stack.
+<h1 align="center">goshare</h1>
 
-> 本项目基于 [joeseesun/quickshare-cloudflare](https://github.com/joeseesun/quickshare-cloudflare) 改造而来。感谢原作者开源 QuickShare Cloudflare；当前版本在原项目基础上加入了 goshare 品牌配置、Cloudflare Workers AI 美化、开源自部署引导页和页面提交数据等改动。
-> This project is adapted from [joeseesun/quickshare-cloudflare](https://github.com/joeseesun/quickshare-cloudflare). Thanks to the original author for open-sourcing QuickShare Cloudflare.
+<p align="center">
+  <strong>把 AI 生成内容变成可拥有、可分享、可自动化的链接。</strong><br>
+  Paste HTML, Markdown, SVG, Mermaid, or static ZIP output, then share it from your own Cloudflare stack.
+</p>
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/HaipingShi/goshare)
+<p align="center">
+  <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/HaipingShi/goshare">
+    <img src="https://deploy.workers.cloudflare.com/button" alt="Deploy to Cloudflare" height="48">
+  </a>
+</p>
+
+<p align="center">
+  <a href="#用-ai-agent-部署"><strong>AI Agent 部署 Prompt</strong></a>
+  ·
+  <a href="#agent-api"><strong>Agent API</strong></a>
+  ·
+  <a href="#本地开发"><strong>本地开发</strong></a>
+  ·
+  <a href="#english"><strong>English</strong></a>
+</p>
+
 [![GitHub stars](https://img.shields.io/github/stars/HaipingShi/goshare?style=social)](https://github.com/HaipingShi/goshare/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/HaipingShi/goshare?style=social)](https://github.com/HaipingShi/goshare/forks)
 [![Issues](https://img.shields.io/github/issues/HaipingShi/goshare)](https://github.com/HaipingShi/goshare/issues)
-[![Last commit](https://img.shields.io/github/last-commit/HaipingShi/goshare)](https://github.com/HaipingShi/goshare/commits/main)
 [![License: ISC](https://img.shields.io/badge/license-ISC-blue.svg)](#license)
 
-![QuickShare 首页：粘贴 Markdown 后自动识别内容类型](docs/assets/quickshare-home.png)
+![goshare 首页：粘贴 Markdown 后自动识别内容类型](docs/assets/quickshare-home.png)
 
-**[中文](#中文) | [English](#english)**
+## 这是什么
 
----
+你让 AI 写了一个 HTML demo、一段 Markdown 文档、一个 SVG 图标、一个 Mermaid 图，或者一个静态网页 ZIP。
 
-<a name="中文"></a>
-## 中文
+goshare 做一件事：把这些内容放进你自己的 Cloudflare R2/D1/Workers，生成一个干净的 `/view/<id>` 链接。你拥有数据，也拥有部署。
 
-你让 AI 写了一个 HTML Demo、一段 Markdown 文档、一个 SVG 图标或一张 Mermaid 流程图。
+## 为什么用
 
-发给别人时，最麻烦的不是内容本身，而是怎么让对方不用下载文件、不用登录平台、点开链接就能看。
-
-QuickShare Cloudflare 把这件事压到一个动作：粘贴内容，生成链接。
-
-内容正文进 R2，索引和权限进 D1，页面跑在 Cloudflare Workers。你拥有数据，也拥有部署。
-
-![QuickShare 生成分享链接，并可切换 5 位访问密码](docs/assets/quickshare-generated-link.png)
-
-## 为什么值得用
-
-- **专为 AI 生成内容准备**：HTML、Markdown、SVG、Mermaid 都能粘贴，自动识别类型并按合适方式渲染。
-- **Markdown 多模板渲染**：内置字节风格、GitHub 和技术文档模板，适合文章、README、提示词和说明文档。
-- **一键部署到 Cloudflare**：Worker、Static Assets、R2、D1 都走同一个仓库配置，适合 Fork 后快速改成自己的工具。
-- **正文不塞数据库**：大段内容放 R2，D1 只保存 ID、时间、类型、密码状态、owner 等元数据。
-- **无账号的个人后台**：每个浏览器自动获得 owner cookie，只管理自己创建的内容。
-- **可选 5 位数字密码**：适合临时发给朋友、客户、群聊或测试用户，不需要注册系统。
-- **可编辑、可删除、可切换保护**：后台能查看列表、编辑正文、复制链接、打开预览、删除过期内容。
-- **可收集页面提交数据**：分享页可通过内置 `window.goshare.submit()` 或 `data-goshare-submit` 表单写入 D1，owner 后台可查看最近提交。
-
-## 适合场景
-
-| 你有这些内容 | 用 QuickShare 后 |
-| --- | --- |
-| AI 生成的 HTML 小页面 | 发一个 `/view/<id>` 链接，对方直接看效果 |
-| Markdown 文档或提示词 | 自动渲染成可读页面，不用贴进聊天窗口刷屏 |
-| SVG 图标或 Mermaid 图 | 生成可分享预览，方便团队快速确认 |
-| 临时内部资料 | 开启 5 位访问密码，降低误传播风险 |
-
-## 功能截图
-
-![QuickShare 分享页：Markdown 和 Mermaid 会被渲染成可读页面](docs/assets/quickshare-rendered-page.png)
-
-| 内容管理后台 | 访问密码 |
-| --- | --- |
-| ![QuickShare 后台：按浏览器 owner 管理自己的分享内容](docs/assets/quickshare-admin.png) | ![QuickShare 密码访问页：输入 5 位数字密码后查看内容](docs/assets/quickshare-password-gate.png) |
+- **AI 输出立刻可交付**：不用让内容困在聊天窗口或本地文件里。
+- **数据归你**：正文进 R2，索引、权限和提交数据进 D1。
+- **人和 Agent 都能创建**：网页粘贴生成，或用 Bearer Token 调 Agent API。
+- **Markdown 好看**：内置字节风格、GitHub、技术文档三种模板。
+- **适合自部署传播**：Deploy Button、`/bootstrap` 和部署 prompt 都已准备好。
 
 ## 一键部署
 
-点击顶部的 **Deploy to Cloudflare** 按钮，Cloudflare 会读取 `wrangler.jsonc`，并在部署流程中绑定：
+点击顶部 **Deploy to Cloudflare**，Cloudflare 会读取 `wrangler.jsonc` 并绑定：
 
-- D1 数据库：`DB`
-- R2 存储桶：`CONTENT_BUCKET`
-- Static Assets：`ASSETS`
-- Worker 入口：`src/worker.js`
+- Worker：`src/worker.js`
+- Static Assets：`public/`
+- D1：`DB`
+- R2：`CONTENT_BUCKET`
+- Workers AI：`AI`
 
-部署命令来自 `package.json`：
-
-```bash
-npm run db:migrate:remote && wrangler deploy
-```
-
-部署完成后建议立刻在 Cloudflare 控制台里修改变量：
+部署后建议立刻在 Cloudflare Worker 的 Variables/Secrets 设置：
 
 ```txt
 AUTH_ENABLED=true
 AUTH_PASSWORD=<your-strong-password>
 COOKIE_SECRET=<openssl rand -hex 32>
+AGENT_API_TOKEN=<agent-api-token-for-coding-agents>
+APP_LOGO_URL=/icon/web/icon-512.png
+PUBLIC_SITE_URL=https://your-share-domain.example
 ```
 
-`AUTH_ENABLED=true` 会保护首页和创建接口；已经生成的分享页仍然可以公开访问，除非你给单条内容开启访问密码。
+## 用 AI Agent 部署
 
-## 开源与自部署传播
+把下面这段话复制给 Codex、Claude Code 或其他 coding agent，让它陪你完成生产部署。
 
-开源发布前请先阅读 [goshare 开源发布清单](docs/OPEN_SOURCE.md)，确认私有域名、真实 D1 ID、生产密码和 Cookie Secret 都没有提交。
+```text
+请作为我的 goshare Cloudflare 部署向导，逐步检查并引导我完成生产部署。
+源码仓库：https://github.com/HaipingShi/goshare
+目标站点域名：<填入你的域名或 workers.dev 地址>
 
-部署完成后可以打开 `/bootstrap`，把项目说明、Deploy to Cloudflare 按钮和“一句话 AI 部署 prompt”做成一个可分享页面，引导其他用户部署自己的分享站。
+请按顺序确认：
+1. Cloudflare Worker、Static Assets、R2 bucket、D1 database 是否已通过 Deploy Button 或 Wrangler 创建并绑定。
+2. 远端 D1 migrations 是否已应用，尤其是 agent_runs、agent_run_logs、page_submissions 和 markdown_theme 相关迁移。
+3. 生产变量/Secret 是否已设置：AUTH_ENABLED、AUTH_PASSWORD、COOKIE_SECRET、AGENT_API_TOKEN、APP_NAME、APP_LOGO_URL、PUBLIC_SITE_URL。
+4. Worker 是否已部署成功，自定义域名是否绑定成功。
+5. 用 curl 测试 /api/agent/pages，确认 Bearer Token 能创建 Markdown 分享页并返回 url、urlId、runId、status、logs。
+6. 打开 /bootstrap、首页、生成链接、分享页和后台管理页做浏览器冒烟验证。
 
-自定义品牌时可以设置 `APP_NAME`、`APP_DESCRIPTION` 和 `APP_LOGO_URL`。`APP_LOGO_URL` 建议使用 512x512 PNG 或 WebP 图片，也可以先用默认 `/icon/web/icon-512.png`。
-
-## 本地开发
-
-### 前置条件
-
-- [ ] 安装 Node.js 20+：`node --version`
-- [ ] 安装依赖：`npm install`
-- [ ] 登录 Cloudflare CLI：`npx wrangler login`
-- [ ] 本地应用 D1 迁移：`npm run db:migrate:local`
-
-### 启动
-
-```bash
-npm run dev
+每一步请先告诉我目的和风险，再给我需要执行的命令或 Cloudflare 控制台操作。
 ```
 
-默认地址通常是 `http://127.0.0.1:8787`，以 Wrangler 输出为准。
+## 功能一览
 
-### 验证
+| 能力 | 说明 |
+| --- | --- |
+| HTML / Markdown / SVG / Mermaid | 自动识别并渲染成可分享页面 |
+| 静态 ZIP | 上传构建产物，托管一个轻量静态站 |
+| 访问密码 | 给单条分享开启 5 位数字密码 |
+| Owner 后台 | 当前浏览器只管理自己创建的页面 |
+| 页面提交数据 | 分享页可用 `window.goshare.submit()` 写入 D1 |
+| Agent API | coding agent 可直接创建分享页 |
 
-```bash
-npm run check
-```
+<details>
+<summary>查看更多截图</summary>
 
-这个命令会执行 `wrangler deploy --dry-run`，用于确认 Worker 配置、模块入口和绑定没有明显问题。
+![goshare 生成分享链接，并可切换访问密码](docs/assets/quickshare-generated-link.png)
+
+![goshare 分享页：Markdown 和 Mermaid 会被渲染成可读页面](docs/assets/quickshare-rendered-page.png)
+
+| 内容管理后台 | 访问密码 |
+| --- | --- |
+| ![goshare 后台](docs/assets/quickshare-admin.png) | ![goshare 密码访问页](docs/assets/quickshare-password-gate.png) |
+
+</details>
 
 ## Agent API
 
-给 vibe coding agent 或其他自动化工具设置一个长期 Bearer Token 后，可以不经过 UI，直接用 HTTP API 创建分享页。
-
-本地开发可在 `.dev.vars` 中设置：
-
-```txt
-AGENT_API_TOKEN=<replace-with-agent-api-token>
-```
-
-生产环境建议使用 Cloudflare Secret：
-
-```bash
-npx wrangler secret put AGENT_API_TOKEN
-```
-
-创建分享页：
+设置 `AGENT_API_TOKEN` 后，vibe coding agent 可以不经过 UI，直接创建分享页。
 
 ```bash
 curl -X POST "https://your-share-domain.example/api/agent/pages" \
@@ -148,7 +127,7 @@ curl -X POST "https://your-share-domain.example/api/agent/pages" \
   }'
 ```
 
-成功响应会包含 `success`、`url`、`urlId`、`runId`、`status` 和 `logs`：
+成功响应包含：
 
 ```json
 {
@@ -157,14 +136,12 @@ curl -X POST "https://your-share-domain.example/api/agent/pages" \
   "urlId": "abc1234",
   "runId": "run_1234567890abcdef12",
   "status": "completed",
-  "logs": [
-    { "level": "info", "message": "agent_request_authenticated" },
-    { "level": "info", "message": "page_created" }
-  ]
+  "logs": []
 }
 ```
 
-OpenAPI 最小片段：
+<details>
+<summary>OpenAPI 最小片段</summary>
 
 ```yaml
 paths:
@@ -196,27 +173,6 @@ paths:
       responses:
         "201":
           description: Page created
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [success, url, urlId, runId, status, logs]
-                properties:
-                  success:
-                    type: boolean
-                  url:
-                    type: string
-                  urlId:
-                    type: string
-                  runId:
-                    type: string
-                  status:
-                    type: string
-                    enum: [completed]
-                  logs:
-                    type: array
-                    items:
-                      type: object
 components:
   securitySchemes:
     bearerAuth:
@@ -224,202 +180,9 @@ components:
       scheme: bearer
 ```
 
-## 手动部署
+</details>
 
-不使用 Deploy Button 时，可以自己创建资源：
-
-```bash
-npx wrangler d1 create quickshare-db
-npx wrangler r2 bucket create quickshare-content
-```
-
-把 D1 输出里的 `database_id` 写回 `wrangler.jsonc`，然后运行：
-
-```bash
-npm run deploy
-```
-
-## 绑定自定义域名
-
-Cloudflare Workers 默认分配 `*.workers.dev` 域名。如果你想使用自己的自定义域名（例如 `share.example.com`），可以通过以下两种方式之一进行绑定：
-
-### 方法 A：通过 Cloudflare 网页后台绑定（推荐，全自动）
-
-1. 登录 [Cloudflare 控制台](https://dash.cloudflare.com/)。
-2. 导航至 **Workers & Pages** -> 选择你的 Worker 应用 `quickshare`。
-3. 点击 **Settings** (设置) 选项卡 -> 选择 **Domains & Routes** (域名与路由)。
-4. 点击 **Add Custom Domain** (添加自定义域名)。
-5. 输入你的自定义域名（例如 `share.yourdomain.com`），点击保存。Cloudflare 会自动为你的域名配置 DNS 记录并申请 SSL 证书，无需手动操作。
-
-### 方法 B：通过 `wrangler.jsonc` 配置文件绑定
-
-1. 打开 [wrangler.jsonc](file:///Users/geesh/projects/tempshare/wrangler.jsonc)。
-2. 找到 `routes` 配置项（已为您添加注释示例），取消注释并填写你的域名：
-   ```json
-   "routes": [
-     { "pattern": "share.yourdomain.com/*", "custom_domain": true }
-   ]
-   ```
-3. 运行部署命令：
-   ```bash
-   npm run deploy
-   ```
-   Wrangler 会自动在你的 Cloudflare 账户中注册并绑定该域名。
-
-## 刷新 README 截图
-
-先启动本地服务：
-
-```bash
-npm run dev
-```
-
-再开一个终端运行：
-
-```bash
-npm run capture:screenshots
-```
-
-如果你的本地服务不是 `8787` 端口：
-
-```bash
-SCREENSHOT_URL=http://127.0.0.1:9000 npm run capture:screenshots
-```
-
-截图会写入 `docs/assets/`。
-
-## 数据模型
-
-```mermaid
-flowchart LR
-  User["User pastes content"] --> Worker["Cloudflare Worker"]
-  Worker --> R2["R2: pages/{id}.txt"]
-  Worker --> D1["D1: id, owner, type, password, timestamps"]
-  D1 --> Admin["Owner-only admin"]
-  R2 --> View["Public /view/{id} page"]
-```
-
-D1 表 `pages` 保存：
-
-- `id`：短链接 ID
-- `r2_key`：R2 对象 key
-- `created_at` / `updated_at`：创建和更新时间
-- `owner_key`：浏览器 owner 身份哈希
-- `password` / `is_protected`：访问密码和保护状态
-- `code_type`：`html`、`markdown`、`svg`、`mermaid`
-- `markdown_theme`：Markdown 渲染模板，默认 `bytedance`，可选 `github`、`docs`
-- `content_size` / `content_sha256`：正文大小和哈希
-
-R2 对象保存在 `pages/{id}.txt`。
-
-分享页提交数据保存在 D1 表 `page_submissions`。非 ZIP 分享页会自动注入一个轻量 SDK：
-
-```html
-<form data-goshare-submit data-goshare-kind="lead">
-  <input name="email" type="email">
-  <button type="submit">提交</button>
-  <p data-goshare-status></p>
-</form>
-```
-
-或在页面脚本中调用：
-
-```js
-await window.goshare.submit({ email: 'user@example.com' }, { kind: 'lead' });
-```
-
-后台接口 `/api/admin/pages/:id/submissions` 会返回当前 owner 名下该页面的最近提交数据。
-
-## Fork 后可以改什么
-
-- 换品牌：修改 `APP_NAME`、`APP_LOGO_URL`、主题色和 footer。
-- 换 Markdown 模板：调整 `public/css/markdown-bytedance.css` 或 `public/css/markdown-themes/`；GitHub 模板基于 MIT licensed `github-markdown-css`。
-- 加登录：把 owner cookie 换成 GitHub、Google、邮箱验证码或 Cloudflare Access。
-- 加过期时间：给 `pages` 表增加 `expires_at`，在读取和后台列表中过滤。
-- 加公开广场：使用 `/api/pages/list/recent` 做最近分享列表。
-- 加自定义域名：在 Cloudflare Workers 路由里绑定你的域名。
-
-## Troubleshooting
-
-| 问题 | 解决方法 |
-| --- | --- |
-| `No such module` 或静态资源 404 | 确认执行过 `npm install`，并通过 `npm run dev` 启动 Wrangler。 |
-| D1 本地表不存在 | 运行 `npm run db:migrate:local`，再重启 `npm run dev`。 |
-| 部署时报 D1 `database_id` 错误 | 手动部署时需要把 `wrangler d1 create` 输出写回 `wrangler.jsonc`；Deploy Button 流程会自动处理绑定。 |
-| 首页任何人都能打开 | 默认 `AUTH_ENABLED=false` 方便体验；生产环境请在 Cloudflare 控制台设置为 `true`。 |
-| 清理 Cookie 后后台看不到旧内容 | 后台按浏览器 owner cookie 区分内容。旧分享链接仍可访问，但当前浏览器会失去管理权。 |
-
-## 致谢
-
-- 原项目：[joeseesun/quickshare-cloudflare](https://github.com/joeseesun/quickshare-cloudflare)
-- [Cloudflare Workers](https://workers.cloudflare.com/)
-- [Cloudflare R2](https://developers.cloudflare.com/r2/)
-- [Cloudflare D1](https://developers.cloudflare.com/d1/)
-- [marked](https://github.com/markedjs/marked)
-- [Playwright](https://playwright.dev/) 用于生成 README 截图
-
-## License
-
-ISC
-
----
-
-<a name="english"></a>
-## English
-
-QuickShare Cloudflare turns AI-generated HTML, Markdown, SVG, and Mermaid into shareable links on your own Cloudflare account.
-
-It stores large content bodies in R2, keeps metadata in D1, and serves everything through Cloudflare Workers.
-
-## Features
-
-- Paste HTML, Markdown, SVG, or Mermaid and get a clean `/view/<id>` URL.
-- Optional 5-digit password per shared page.
-- R2-backed content storage, D1-backed metadata.
-- Owner-cookie based admin without user accounts.
-- Admin page for listing, editing, opening, copying, protecting, and deleting your own shares.
-- Deploy Button support for fast Cloudflare setup.
-
-## Deploy
-
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/HaipingShi/goshare)
-
-Recommended production variables:
-
-```txt
-AUTH_ENABLED=true
-AUTH_PASSWORD=<your-strong-password>
-COOKIE_SECRET=<openssl rand -hex 32>
-```
-
-## Custom Domain
-
-By default, Cloudflare Workers are deployed to `*.workers.dev`. If you want to use your own custom domain (e.g., `share.example.com`), you can bind it in one of two ways:
-
-### Method A: Via Cloudflare Dashboard (Recommended, Fully Automated)
-
-1. Log in to the [Cloudflare Dashboard](https://dash.cloudflare.com/).
-2. Navigate to **Workers & Pages** -> select your Worker `quickshare`.
-3. Go to the **Settings** tab -> click **Domains & Routes**.
-4. Click **Add Custom Domain**.
-5. Enter your domain (e.g., `share.yourdomain.com`) and save. Cloudflare will automatically configure DNS records and issue an SSL certificate for you.
-
-### Method B: Via `wrangler.jsonc` Configuration
-
-1. Open [wrangler.jsonc](file:///Users/geesh/projects/tempshare/wrangler.jsonc).
-2. Uncomment the `routes` block and specify your custom domain:
-   ```json
-   "routes": [
-     { "pattern": "share.yourdomain.com/*", "custom_domain": true }
-   ]
-   ```
-3. Run the deploy command:
-   ```bash
-   npm run deploy
-   ```
-   Wrangler will register the custom domain routing inside your Cloudflare account.
-
-## Local Development
+## 本地开发
 
 ```bash
 npm install
@@ -427,117 +190,82 @@ npm run db:migrate:local
 npm run dev
 ```
 
-Run a dry deployment check:
+验证 Worker 配置：
 
 ```bash
 npm run check
 ```
 
-## Agent API
-
-Set `AGENT_API_TOKEN` to let coding agents create share pages over HTTP without using the UI.
-
-```bash
-npx wrangler secret put AGENT_API_TOKEN
-```
-
-Create a page:
-
-```bash
-curl -X POST "https://your-share-domain.example/api/agent/pages" \
-  -H "Authorization: Bearer $AGENT_API_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "content": "# Hello goshare\n\nCreated by an agent.",
-    "codeType": "markdown",
-    "markdownTheme": "github",
-    "isProtected": false
-  }'
-```
-
-The JSON response includes `success`, `url`, `urlId`, `runId`, `status`, and `logs`.
-
-Minimal OpenAPI snippet:
-
-```yaml
-paths:
-  /api/agent/pages:
-    post:
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                content:
-                  type: string
-                htmlContent:
-                  type: string
-                zipContent:
-                  type: string
-                codeType:
-                  type: string
-                  enum: [html, markdown, svg, mermaid, zip]
-                markdownTheme:
-                  type: string
-                  enum: [bytedance, github, docs]
-                isProtected:
-                  type: boolean
-      responses:
-        "201":
-          description: Page created
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [success, url, urlId, runId, status, logs]
-                properties:
-                  success:
-                    type: boolean
-                  url:
-                    type: string
-                  urlId:
-                    type: string
-                  runId:
-                    type: string
-                  status:
-                    type: string
-                    enum: [completed]
-                  logs:
-                    type: array
-                    items:
-                      type: object
-components:
-  securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-```
-
-Refresh README screenshots:
+刷新 README 截图：
 
 ```bash
 npm run capture:screenshots
 ```
 
-Use another local URL:
+## 手动部署
+
+Deploy Button 之外，也可以用 Wrangler 自己创建资源：
 
 ```bash
-SCREENSHOT_URL=http://127.0.0.1:9000 npm run capture:screenshots
+npx wrangler d1 create goshare-db
+npx wrangler r2 bucket create goshare-content
+npx wrangler secret put AUTH_PASSWORD
+npx wrangler secret put COOKIE_SECRET
+npx wrangler secret put AGENT_API_TOKEN
+npm run deploy
 ```
 
-## Architecture
+自定义域名推荐在 Cloudflare 控制台的 **Workers & Pages -> goshare -> Settings -> Domains & Routes** 里绑定。
 
-- `src/worker.js`: Cloudflare Worker routes and API handlers
-- `src/templates.js`: HTML templates for the index, admin, login, password, and error pages
-- `src/renderers.js`: content type detection and rendering
-- `public/`: static CSS, JS, icons, and assets
-- `migrations/`: D1 schema migrations
-- `docs/assets/`: README screenshots
+## 数据模型
 
-## Notes
+```mermaid
+flowchart LR
+  User["User or agent"] --> Worker["Cloudflare Worker"]
+  Worker --> R2["R2: page content"]
+  Worker --> D1["D1: metadata, owner, runs, submissions"]
+  D1 --> Admin["Owner admin"]
+  R2 --> View["/view/{id}"]
+```
 
-The admin page is intentionally lightweight. It uses an owner cookie to separate content created by different browsers. If the cookie is cleared, old public links still work, but that browser loses management access for those pages.
+核心表：
+
+- `pages`：短链、R2 key、owner、密码、内容类型、Markdown 模板。
+- `page_submissions`：分享页内提交的数据。
+- `agent_runs` / `agent_run_logs`：Agent API 创建记录和日志。
+
+## 可以改什么
+
+- 换品牌：`APP_NAME`、`APP_DESCRIPTION`、`APP_LOGO_URL`、footer。
+- 换模板：调整 `public/css/markdown-bytedance.css` 或 `public/css/markdown-themes/`。
+- 加认证：把 owner cookie 换成 GitHub、Google、邮箱验证码或 Cloudflare Access。
+- 加生命周期：给 `pages` 增加 `expires_at`。
+- 加公开广场：基于 `/api/pages/list/recent` 展示最近分享。
+
+## 常见问题
+
+| 问题 | 处理 |
+| --- | --- |
+| D1 本地表不存在 | 运行 `npm run db:migrate:local` |
+| 生产 Agent API 返回未配置 | 设置 `AGENT_API_TOKEN` secret |
+| 首页不想公开 | 设置 `AUTH_ENABLED=true` 和 `AUTH_PASSWORD` |
+| 清 Cookie 后后台看不到旧内容 | owner 身份保存在浏览器 cookie；旧分享链接仍可访问 |
+
+## English
+
+goshare turns AI-generated HTML, Markdown, SVG, Mermaid, and static ZIP output into shareable links on your own Cloudflare stack.
+
+- Content is stored in R2; metadata, owners, submissions, and agent runs are stored in D1.
+- Users can paste content in the UI; coding agents can create pages through `POST /api/agent/pages`.
+- Deploy with the Cloudflare button above, then set `AUTH_PASSWORD`, `COOKIE_SECRET`, and `AGENT_API_TOKEN`.
+- Run locally with `npm install`, `npm run db:migrate:local`, and `npm run dev`.
+
+## 致谢
+
+本项目基于 [joeseesun/quickshare-cloudflare](https://github.com/joeseesun/quickshare-cloudflare) 改造而来。感谢原作者开源 QuickShare Cloudflare。
+
+Thanks to [Cloudflare Workers](https://workers.cloudflare.com/), [Cloudflare R2](https://developers.cloudflare.com/r2/), [Cloudflare D1](https://developers.cloudflare.com/d1/), [marked](https://github.com/markedjs/marked), and [Playwright](https://playwright.dev/).
+
+## License
+
+ISC
