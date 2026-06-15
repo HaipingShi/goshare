@@ -16,7 +16,7 @@ import {
   renderContent,
 } from './renderers.js';
 
-const DEFAULT_COOKIE_PREFIX = 'quickshare';
+const DEFAULT_COOKIE_PREFIX = 'goshare';
 const AUTH_TTL_SECONDS = 24 * 60 * 60;
 const OWNER_TTL_SECONDS = 60 * 60 * 24 * 365 * 2;
 const MAX_CONTENT_LENGTH = 10 * 1024 * 1024;
@@ -1906,7 +1906,7 @@ function getPagePasswordCookieName(env, id) {
 }
 
 async function sign(value, env) {
-  const secret = String(env.COOKIE_SECRET || env.AUTH_PASSWORD || 'quickshare-local-secret');
+  const secret = String(env.COOKIE_SECRET || env.AUTH_PASSWORD || 'goshare-local-secret');
   const key = await crypto.subtle.importKey(
     'raw',
     new TextEncoder().encode(secret),

@@ -1,5 +1,5 @@
 {
-  "name": "quickshare",
+  "name": "goshare",
   "version": "2.0.0",
   "description": "HTML/Markdown/SVG/Mermaid 分享工具，支持 Cloudflare Workers、R2 和 D1 一键部署",
   "type": "module",

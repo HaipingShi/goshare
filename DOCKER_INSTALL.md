@@ -13,8 +13,8 @@ u672cu6587u6863u63d0u4f9bu4e86u4f7fu7528 Docker u90e8u7f72 HTML-Go Express u5e94
 
 1. u514bu9686u4ed3u5e93uff08u5982u679cu5df2u6709u4ee3u7801uff0cu8df3u8fc7u6b64u6b65u9aa4uff09
    ```bash
-   git clone https://github.com/joeseesun/quickshare.git
-   cd quickshare
+   git clone https://github.com/HaipingShi/goshare.git
+   cd goshare
    ```
 
 2. u542fu52a8u5e94u7528
@@ -34,8 +34,8 @@ u672cu6587u6863u63d0u4f9bu4e86u4f7fu7528 Docker u90e8u7f72 HTML-Go Express u5e94
 
 1. u514bu9686u4ed3u5e93uff08u5982u679cu5df2u6709u4ee3u7801uff0cu8df3u8fc7u6b64u6b65u9aa4uff09
    ```bash
-   git clone https://github.com/joeseesun/quickshare.git
-   cd quickshare
+   git clone https://github.com/HaipingShi/goshare.git
+   cd goshare
    ```
 
 2. u6784u5efa Docker u955cu50cf
