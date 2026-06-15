@@ -32,7 +32,7 @@
 [![Issues](https://img.shields.io/github/issues/HaipingShi/goshare)](https://github.com/HaipingShi/goshare/issues)
 [![License: ISC](https://img.shields.io/badge/license-ISC-blue.svg)](#license)
 
-![goshare 首页：粘贴 Markdown 后自动识别内容类型](docs/assets/quickshare-home.png)
+![goshare 首页：粘贴 Markdown 后自动识别内容类型](docs/assets/goshare-home.png)
 
 ## 这是什么
 
@@ -133,13 +133,13 @@ MAX_SHARE_METADATA_CONTENT_KB=24
 <details>
 <summary>查看更多截图</summary>
 
-![goshare 生成分享链接，并可切换访问密码](docs/assets/quickshare-generated-link.png)
+![goshare 生成分享链接，并可切换访问密码](docs/assets/goshare-generated-link.png)
 
-![goshare 分享页：Markdown 和 Mermaid 会被渲染成可读页面](docs/assets/quickshare-rendered-page.png)
+![goshare 分享页：Markdown 和 Mermaid 会被渲染成可读页面](docs/assets/goshare-rendered-page.png)
 
 | 内容管理后台 | 访问密码 |
 | --- | --- |
-| ![goshare 后台](docs/assets/quickshare-admin.png) | ![goshare 密码访问页](docs/assets/quickshare-password-gate.png) |
+| ![goshare 后台](docs/assets/goshare-admin.png) | ![goshare 密码访问页](docs/assets/goshare-password-gate.png) |
 
 </details>
 

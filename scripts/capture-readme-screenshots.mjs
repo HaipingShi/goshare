@@ -32,7 +32,7 @@ try {
   await page.goto(baseUrl, { waitUntil: 'networkidle' });
   await page.locator('#html-input').fill(sampleMarkdown);
   await page.screenshot({
-    path: path.join(outputDir, 'quickshare-home.png'),
+    path: path.join(outputDir, 'goshare-home.png'),
     fullPage: true,
   });
 
@@ -47,14 +47,14 @@ try {
   await page.locator('#generate-button').click();
   await page.locator('#result-section').waitFor({ state: 'visible' });
   await page.screenshot({
-    path: path.join(outputDir, 'quickshare-generated-link.png'),
+    path: path.join(outputDir, 'goshare-generated-link.png'),
     fullPage: true,
   });
 
   const urlId = await page.locator('#result-url').evaluate((node) => node.dataset.originalUrl.split('/').pop());
   await page.goto(`${baseUrl}/view/${urlId}`, { waitUntil: 'networkidle' });
   await page.screenshot({
-    path: path.join(outputDir, 'quickshare-rendered-page.png'),
+    path: path.join(outputDir, 'goshare-rendered-page.png'),
     fullPage: true,
   });
 
@@ -65,13 +65,13 @@ try {
   await page.locator('#admin-save').click();
   await page.locator('tr[data-id]').first().waitFor({ state: 'visible' });
   await page.screenshot({
-    path: path.join(outputDir, 'quickshare-admin.png'),
+    path: path.join(outputDir, 'goshare-admin.png'),
     fullPage: true,
   });
 
   await page.goto(`${baseUrl}/view/${urlId}`, { waitUntil: 'networkidle' });
   await page.screenshot({
-    path: path.join(outputDir, 'quickshare-password-gate.png'),
+    path: path.join(outputDir, 'goshare-password-gate.png'),
     fullPage: true,
   });
 } finally {
