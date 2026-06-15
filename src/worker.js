@@ -6,6 +6,7 @@ import {
   renderLoginPage,
   renderPasswordPage,
   renderBootstrapPage,
+  renderShareCardPage,
 } from './templates.js';
 import {
   CODE_TYPES,
@@ -24,6 +25,10 @@ const DEFAULT_MAX_BEAUTIFY_CONTENT_LENGTH = 120 * 1024;
 const MAX_SUBMISSION_PAYLOAD_LENGTH = 64 * 1024;
 const MAX_SUBMISSION_KIND_LENGTH = 40;
 const DEFAULT_BEAUTIFY_MODEL = '@cf/zai-org/glm-4.7-flash';
+const DEFAULT_SHARE_METADATA_MODEL = DEFAULT_BEAUTIFY_MODEL;
+const DEFAULT_MAX_SHARE_METADATA_CONTENT_LENGTH = 24 * 1024;
+const MAX_SHARE_TITLE_LENGTH = 80;
+const MAX_SHARE_SUMMARY_LENGTH = 180;
 const VALID_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
 const VALID_CODE_TYPES = new Set([
   CODE_TYPES.HTML,
@@ -162,6 +167,11 @@ async function handleRequest(request, env) {
     return validatePassword(env, validateMatch[1], url.searchParams.get('password'));
   }
 
+  const shareMatch = pathname.match(/^\/share\/([^/]+)$/);
+  if (shareMatch && request.method === 'GET') {
+    return sharePage(request, env, shareMatch[1]);
+  }
+
   const viewMatch = pathname.match(/^\/view\/([^/]+)(?:\/(.*))?$/);
   if (viewMatch && request.method === 'GET') {
     const id = viewMatch[1];
@@ -212,11 +222,18 @@ async function createPage(request, env) {
   });
   if (!result.ok) return createPageErrorResponse(result);
 
+  const cardUrl = buildShareCardUrl(request, env, result.page.urlId);
+  const viewUrl = buildViewUrl(request, env, result.page.urlId);
   return jsonResponse({
     success: true,
+    url: cardUrl,
+    cardUrl,
+    viewUrl,
     urlId: result.page.urlId,
     password: result.page.password,
     isProtected: result.page.isProtected,
+    title: result.page.title,
+    summary: result.page.summary,
   }, 200, owner.cookieHeader ? { 'Set-Cookie': owner.cookieHeader } : {});
 }
 
@@ -247,10 +264,14 @@ async function createAgentPage(request, env) {
       return finishAgentRunWithFailure(env, runId, logs, result.error, result.status);
     }
 
-    const url = buildShareUrl(request, env, result.page.urlId);
+    const url = buildShareCardUrl(request, env, result.page.urlId);
+    const viewUrl = buildViewUrl(request, env, result.page.urlId);
     await appendAgentRunLog(env, runId, logs, 'info', 'page_created', {
       url,
+      viewUrl,
       urlId: result.page.urlId,
+      title: result.page.title,
+      summary: result.page.summary,
       codeType: result.page.codeType,
       markdownTheme: result.page.markdownTheme,
       isProtected: result.page.isProtected,
@@ -262,9 +283,13 @@ async function createAgentPage(request, env) {
     return jsonResponse({
       success: true,
       url,
+      cardUrl: url,
+      viewUrl,
       urlId: result.page.urlId,
       runId,
       status: 'completed',
+      title: result.page.title,
+      summary: result.page.summary,
       logs,
     }, 201);
   } catch (error) {
@@ -381,6 +406,15 @@ async function createSharePageFromPayload(payload, env, options = {}) {
     contentSize = encoder.encode(htmlContent).byteLength;
   }
 
+  const metadata = await generateShareMetadata({
+    env,
+    content: codeType === CODE_TYPES.ZIP ? '' : htmlContent,
+    codeType,
+    providedTitle: payload.title,
+    providedSummary: payload.summary,
+  });
+  const shareCardTheme = normalizeShareCardTheme(payload.shareCardTheme);
+
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const urlId = await generatePageId(codeType === CODE_TYPES.ZIP ? zipContent : htmlContent, attempt);
     const r2Key = codeType === CODE_TYPES.ZIP ? `pages/${urlId}/index.html` : `pages/${urlId}.txt`;
@@ -410,10 +444,26 @@ async function createSharePageFromPayload(payload, env, options = {}) {
       }
 
       await env.DB.prepare(`
-        INSERT INTO pages (id, r2_key, created_at, updated_at, owner_key, password, is_protected, code_type, markdown_theme, content_size, content_sha256)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO pages (id, r2_key, created_at, updated_at, owner_key, password, is_protected, code_type, markdown_theme, content_size, content_sha256, title, summary, metadata_source, share_card_theme)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
-        .bind(urlId, r2Key, createdAt, updatedAt, ownerKey, password, isProtected ? 1 : 0, codeType, markdownTheme, contentSize, contentHash)
+        .bind(
+          urlId,
+          r2Key,
+          createdAt,
+          updatedAt,
+          ownerKey,
+          password,
+          isProtected ? 1 : 0,
+          codeType,
+          markdownTheme,
+          contentSize,
+          contentHash,
+          metadata.title,
+          metadata.summary,
+          metadata.source,
+          shareCardTheme,
+        )
         .run();
 
       return {
@@ -426,6 +476,10 @@ async function createSharePageFromPayload(payload, env, options = {}) {
           markdownTheme,
           contentSize,
           contentHash,
+          title: metadata.title,
+          summary: metadata.summary,
+          metadataSource: metadata.source,
+          shareCardTheme,
         },
       };
     } catch (error) {
@@ -562,10 +616,18 @@ async function appendAgentRunLog(env, runId, logs, level, message, data) {
   logs.push(log);
 }
 
-function buildShareUrl(request, env, urlId) {
+function buildPublicUrl(request, env, path) {
   const publicSiteUrl = String(env.PUBLIC_SITE_URL || '').trim().replace(/\/+$/, '');
   const origin = publicSiteUrl || new URL(request.url).origin;
-  return `${origin}/view/${encodeURIComponent(urlId)}`;
+  return `${origin}${path}`;
+}
+
+function buildShareCardUrl(request, env, urlId) {
+  return buildPublicUrl(request, env, `/share/${encodeURIComponent(urlId)}`);
+}
+
+function buildViewUrl(request, env, urlId) {
+  return buildPublicUrl(request, env, `/view/${encodeURIComponent(urlId)}`);
 }
 
 async function previewPage(request, env) {
@@ -726,7 +788,7 @@ async function listOwnedPages(request, env) {
   const limit = Math.min(Math.max(Number.parseInt(url.searchParams.get('limit') || '100', 10), 1), 200);
 
   const result = await env.DB.prepare(`
-    SELECT id, created_at, COALESCE(updated_at, created_at) AS updated_at, is_protected, code_type, content_size
+    SELECT id, created_at, COALESCE(updated_at, created_at) AS updated_at, is_protected, code_type, content_size, COALESCE(title, id) AS title, COALESCE(summary, '') AS summary
     FROM pages
     WHERE owner_key = ?
     ORDER BY COALESCE(updated_at, created_at) DESC
@@ -865,6 +927,13 @@ async function updateOwnedPage(request, env, id) {
   const contentSize = encoder.encode(htmlContent).byteLength;
   const contentHash = await sha256Hex(htmlContent);
   const updatedAt = Date.now();
+  const metadata = await generateShareMetadata({
+    env,
+    content: htmlContent,
+    codeType,
+    providedTitle: payload.title,
+    providedSummary: payload.summary,
+  });
 
   await env.CONTENT_BUCKET.put(page.r2_key, htmlContent, {
     httpMetadata: { contentType: 'text/plain; charset=utf-8' },
@@ -876,10 +945,22 @@ async function updateOwnedPage(request, env, id) {
 
   await env.DB.prepare(`
     UPDATE pages
-    SET updated_at = ?, is_protected = ?, code_type = ?, markdown_theme = ?, content_size = ?, content_sha256 = ?
+    SET updated_at = ?, is_protected = ?, code_type = ?, markdown_theme = ?, content_size = ?, content_sha256 = ?, title = ?, summary = ?, metadata_source = ?
     WHERE id = ? AND owner_key = ?
   `)
-    .bind(updatedAt, payload.isProtected ? 1 : 0, codeType, markdownTheme, contentSize, contentHash, id, owner.ownerKey)
+    .bind(
+      updatedAt,
+      payload.isProtected ? 1 : 0,
+      codeType,
+      markdownTheme,
+      contentSize,
+      contentHash,
+      metadata.title,
+      metadata.summary,
+      metadata.source,
+      id,
+      owner.ownerKey,
+    )
     .run();
 
   return jsonResponse({
@@ -993,6 +1074,8 @@ async function getPageInfo(env, id) {
       codeType: page.code_type,
       markdownTheme: page.markdown_theme,
       size: page.content_size,
+      title: page.title,
+      summary: page.summary,
     },
   });
 }
@@ -1011,6 +1094,30 @@ async function validatePassword(env, id, password) {
   return jsonResponse({
     valid: page.is_protected === 1 && password === page.password,
   });
+}
+
+async function sharePage(request, env, id) {
+  assertBindings(env);
+  if (!isValidId(id)) {
+    return htmlResponse(renderErrorPage({
+      title: '分享不存在',
+      message: '您请求的分享卡片不存在或已被删除',
+    }, env), 404);
+  }
+
+  const page = await getPageRecord(env, id);
+  if (!page) {
+    return htmlResponse(renderErrorPage({
+      title: '分享不存在',
+      message: '您请求的分享卡片不存在或已被删除',
+    }, env), 404);
+  }
+
+  return htmlResponse(renderShareCardPage({
+    page,
+    shareUrl: buildShareCardUrl(request, env, id),
+    viewUrl: buildViewUrl(request, env, id),
+  }, env));
 }
 
 async function viewPage(request, env, id, subpath = '') {
@@ -1095,7 +1202,15 @@ async function viewPage(request, env, id, subpath = '') {
       markdownTheme: page.markdown_theme,
     });
     const contentWithTypeInfo = injectGoshareDataSdk(
-      injectCodeTypeMeta(renderedContent, normalized.contentType || page.code_type),
+      injectShareMeta(
+        injectCodeTypeMeta(renderedContent, normalized.contentType || page.code_type),
+        {
+          title: page.title,
+          summary: page.summary,
+          url: buildShareCardUrl(request, env, page.id),
+        },
+        env,
+      ),
       page.id,
     );
 
@@ -1115,7 +1230,7 @@ async function viewPage(request, env, id, subpath = '') {
 
 async function getPageRecord(env, id) {
   return env.DB.prepare(`
-    SELECT id, r2_key, created_at, COALESCE(updated_at, created_at) AS updated_at, owner_key, password, is_protected, code_type, COALESCE(markdown_theme, 'bytedance') AS markdown_theme, content_size, content_sha256
+    SELECT id, r2_key, created_at, COALESCE(updated_at, created_at) AS updated_at, owner_key, password, is_protected, code_type, COALESCE(markdown_theme, 'bytedance') AS markdown_theme, content_size, content_sha256, COALESCE(title, id) AS title, COALESCE(summary, '') AS summary, COALESCE(metadata_source, 'fallback') AS metadata_source, COALESCE(share_card_theme, 'default') AS share_card_theme
     FROM pages
     WHERE id = ?
   `)
@@ -1125,7 +1240,7 @@ async function getPageRecord(env, id) {
 
 async function getOwnedPageRecord(env, id, ownerKey) {
   return env.DB.prepare(`
-    SELECT id, r2_key, created_at, COALESCE(updated_at, created_at) AS updated_at, owner_key, password, is_protected, code_type, COALESCE(markdown_theme, 'bytedance') AS markdown_theme, content_size, content_sha256
+    SELECT id, r2_key, created_at, COALESCE(updated_at, created_at) AS updated_at, owner_key, password, is_protected, code_type, COALESCE(markdown_theme, 'bytedance') AS markdown_theme, content_size, content_sha256, COALESCE(title, id) AS title, COALESCE(summary, '') AS summary, COALESCE(metadata_source, 'fallback') AS metadata_source, COALESCE(share_card_theme, 'default') AS share_card_theme
     FROM pages
     WHERE id = ? AND owner_key = ?
   `)
@@ -1226,6 +1341,210 @@ function parseStoredJson(value) {
   } catch {
     return null;
   }
+}
+
+async function generateShareMetadata({ env, content, codeType, providedTitle, providedSummary }) {
+  const fallback = extractFallbackShareMetadata(content, codeType);
+  const manualTitle = normalizeShareTitle(providedTitle);
+  const manualSummary = normalizeShareSummary(providedSummary);
+
+  if (manualTitle && manualSummary) {
+    return {
+      title: manualTitle,
+      summary: manualSummary,
+      source: 'manual',
+    };
+  }
+
+  if (shouldUseShareMetadataAi(env, content, codeType)) {
+    try {
+      const aiMetadata = await generateAiShareMetadata(env, content, codeType);
+      if (aiMetadata) {
+        return {
+          title: manualTitle || aiMetadata.title || fallback.title,
+          summary: manualSummary || aiMetadata.summary || fallback.summary,
+          source: 'ai',
+        };
+      }
+    } catch (error) {
+      console.error('AI share metadata failed:', error);
+    }
+  }
+
+  return {
+    title: manualTitle || fallback.title,
+    summary: manualSummary || fallback.summary,
+    source: manualTitle || manualSummary ? 'manual' : 'fallback',
+  };
+}
+
+function shouldUseShareMetadataAi(env, content, codeType) {
+  if (codeType === CODE_TYPES.ZIP) return false;
+  if (!content || !env.AI) return false;
+  const explicit = String(env.AI_SHARE_METADATA_ENABLED || '').trim().toLowerCase();
+  if (explicit) return explicit !== 'false';
+  return String(env.AI_ENABLED || 'true').toLowerCase() !== 'false';
+}
+
+async function generateAiShareMetadata(env, content, codeType) {
+  const model = String(env.AI_SHARE_METADATA_MODEL || DEFAULT_SHARE_METADATA_MODEL);
+  const prompt = buildShareMetadataPrompt(
+    content.slice(0, getMaxShareMetadataContentLength(env)),
+    codeType,
+  );
+
+  const aiResult = await env.AI.run(model, {
+    messages: [
+      {
+        role: 'system',
+        content: 'You write concise share-card metadata. Return only valid JSON.',
+      },
+      {
+        role: 'user',
+        content: prompt,
+      },
+    ],
+    temperature: 0.2,
+    max_completion_tokens: 512,
+  });
+
+  const rawText = extractAiText(aiResult).trim();
+  if (!rawText) return null;
+
+  const parsed = JSON.parse(stripMarkdownFence(rawText));
+  if (!parsed || typeof parsed !== 'object') return null;
+
+  const title = normalizeShareTitle(parsed.title);
+  const summary = normalizeShareSummary(parsed.summary);
+  if (!title && !summary) return null;
+  return { title, summary };
+}
+
+function buildShareMetadataPrompt(content, codeType) {
+  return `Read the user's shared content and produce share-card metadata.
+
+Return ONLY JSON:
+{"title":"short readable title","summary":"one concise sentence"}
+
+Rules:
+- Preserve the user's actual meaning.
+- Do not invent facts, customers, prices, rankings, credentials, sources, or claims.
+- Title max ${MAX_SHARE_TITLE_LENGTH} characters.
+- Summary max ${MAX_SHARE_SUMMARY_LENGTH} characters.
+- Prefer Chinese if the input is Chinese; otherwise use the input language.
+- Avoid markdown fences.
+
+Input type: ${codeType}
+Input content:
+${content}`;
+}
+
+function extractFallbackShareMetadata(content, codeType) {
+  if (codeType === CODE_TYPES.ZIP) {
+    return {
+      title: '静态网页分享',
+      summary: '一个通过 goshare 发布的静态网页。',
+    };
+  }
+
+  const raw = String(content || '').trim();
+  if (codeType === CODE_TYPES.MARKDOWN) {
+    const heading = raw.match(/^#\s+(.+)$/m) || raw.match(/^##\s+(.+)$/m);
+    const paragraph = raw
+      .split(/\n+/)
+      .map((line) => line.trim())
+      .find((line) => line && !line.startsWith('#') && !line.startsWith('```') && !line.startsWith('---'));
+    return {
+      title: normalizeShareTitle(heading?.[1]) || 'Markdown 分享',
+      summary: normalizeShareSummary(paragraph) || '一份通过 goshare 发布的 Markdown 内容。',
+    };
+  }
+
+  if (codeType === CODE_TYPES.HTML) {
+    const title = raw.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]
+      || raw.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1];
+    const description = raw.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["'][^>]*>/i)?.[1]
+      || raw.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["'][^>]*>/i)?.[1];
+    const plainText = htmlToText(raw);
+    return {
+      title: normalizeShareTitle(htmlToText(title || '')) || 'HTML 分享',
+      summary: normalizeShareSummary(description || plainText) || '一个通过 goshare 发布的 HTML 页面。',
+    };
+  }
+
+  if (codeType === CODE_TYPES.SVG) {
+    const title = raw.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1];
+    return {
+      title: normalizeShareTitle(htmlToText(title || '')) || 'SVG 图形分享',
+      summary: '一份通过 goshare 发布的 SVG 视觉内容。',
+    };
+  }
+
+  if (codeType === CODE_TYPES.MERMAID) {
+    const firstLine = raw.split('\n').map((line) => line.trim()).find(Boolean);
+    return {
+      title: normalizeShareTitle(firstLine) || 'Mermaid 图表分享',
+      summary: '一份通过 goshare 发布的 Mermaid 图表。',
+    };
+  }
+
+  const plainText = htmlToText(raw);
+  return {
+    title: normalizeShareTitle(plainText) || 'goshare 分享',
+    summary: normalizeShareSummary(plainText) || '一份通过 goshare 发布的内容。',
+  };
+}
+
+function normalizeShareTitle(value) {
+  const normalized = normalizeMetadataText(value);
+  if (!normalized) return '';
+  return truncateText(normalized, MAX_SHARE_TITLE_LENGTH);
+}
+
+function normalizeShareSummary(value) {
+  const normalized = normalizeMetadataText(value);
+  if (!normalized) return '';
+  return truncateText(normalized, MAX_SHARE_SUMMARY_LENGTH);
+}
+
+function normalizeMetadataText(value) {
+  return htmlToText(String(value || ''))
+    .replace(/^#+\s*/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function truncateText(value, maxLength) {
+  const chars = Array.from(String(value || ''));
+  if (chars.length <= maxLength) return chars.join('');
+  return `${chars.slice(0, Math.max(0, maxLength - 1)).join('')}…`;
+}
+
+function htmlToText(value) {
+  return String(value || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeShareCardTheme(value) {
+  const theme = String(value || 'default').trim().toLowerCase();
+  return /^[a-z0-9_-]{1,32}$/.test(theme) ? theme : 'default';
+}
+
+function getMaxShareMetadataContentLength(env) {
+  const parsedKb = Number.parseInt(String(env.MAX_SHARE_METADATA_CONTENT_KB || ''), 10);
+  if (!Number.isFinite(parsedKb) || parsedKb <= 0) return DEFAULT_MAX_SHARE_METADATA_CONTENT_LENGTH;
+  return Math.min(parsedKb, 128) * 1024;
 }
 
 function buildBeautifyPrompt(content, codeType) {
@@ -1372,6 +1691,26 @@ function injectCodeTypeMeta(html, contentType) {
   return html;
 }
 
+function injectShareMeta(html, metadata, env) {
+  if (!html.includes('</head>')) return html;
+
+  const title = metadata.title || 'goshare 分享';
+  const summary = metadata.summary || '一份通过 goshare 发布的内容。';
+  const imageUrl = String(env.APP_LOGO_URL || '/icon/web/icon-512.png').trim() || '/icon/web/icon-512.png';
+  const meta = [
+    `<meta property="og:title" content="${escapeHtmlAttribute(title)}">`,
+    `<meta property="og:description" content="${escapeHtmlAttribute(summary)}">`,
+    `<meta property="og:type" content="article">`,
+    `<meta property="og:url" content="${escapeHtmlAttribute(metadata.url || '')}">`,
+    `<meta property="og:image" content="${escapeHtmlAttribute(imageUrl)}">`,
+    `<meta name="twitter:card" content="summary_large_image">`,
+    `<meta name="twitter:title" content="${escapeHtmlAttribute(title)}">`,
+    `<meta name="twitter:description" content="${escapeHtmlAttribute(summary)}">`,
+  ].join('\n');
+
+  return html.replace('</head>', `${meta}\n</head>`);
+}
+
 function injectGoshareDataSdk(html, pageId) {
   const script = `<script>
 (function() {
@@ -1432,6 +1771,15 @@ function injectGoshareDataSdk(html, pageId) {
     return html.replace('</body>', `${script}\n</body>`);
   }
   return `${html}\n${script}`;
+}
+
+function escapeHtmlAttribute(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 function isAuthEnabled(env) {

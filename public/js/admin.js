@@ -80,12 +80,20 @@
 
     elements.body.innerHTML = state.pages.map((page) => {
       const selectedClass = state.selected?.id === page.id ? ' selected' : '';
+      const title = page.title || page.id;
+      const summary = page.summary || '';
       const status = page.is_protected
         ? '<span class="admin-badge protected"><i class="fas fa-lock"></i>受保护</span>'
         : '<span class="admin-badge"><i class="fas fa-unlock"></i>公开</span>';
 
       return `<tr class="${selectedClass}" data-id="${escapeHtml(page.id)}">
-        <td><span class="admin-id">${escapeHtml(page.id)}</span></td>
+        <td>
+          <div class="admin-page-title">
+            <span class="admin-page-name">${escapeHtml(title)}</span>
+            ${summary ? `<span class="admin-page-summary">${escapeHtml(summary)}</span>` : ''}
+            <span class="admin-id">${escapeHtml(page.id)}</span>
+          </div>
+        </td>
         <td>${escapeHtml(page.code_type || 'html')}</td>
         <td>${status}</td>
         <td>${formatSize(page.content_size || 0)}</td>
@@ -105,7 +113,7 @@
     elements.body.querySelectorAll('button[data-action="open"]').forEach((button) => {
       button.addEventListener('click', (event) => {
         event.stopPropagation();
-        window.open(`/view/${button.dataset.id}`, '_blank', 'noopener,noreferrer');
+        window.open(`/share/${button.dataset.id}`, '_blank', 'noopener,noreferrer');
       });
     });
   }
@@ -128,8 +136,8 @@
   }
 
   function fillForm(page) {
-    const url = `${window.location.origin}/view/${page.id}`;
-    elements.selectedId.textContent = page.id;
+    const url = `${window.location.origin}/share/${page.id}`;
+    elements.selectedId.textContent = page.title || page.id;
     elements.content.value = page.htmlContent || '';
     elements.codeType.value = page.code_type || 'html';
     elements.markdownTheme.value = page.markdown_theme || 'bytedance';
@@ -282,7 +290,7 @@
 
   async function copySelectedLink() {
     if (!state.selected) return;
-    const url = `${window.location.origin}/view/${state.selected.id}`;
+    const url = `${window.location.origin}/share/${state.selected.id}`;
     try {
       await navigator.clipboard.writeText(url);
       elements.password.textContent = '链接已复制';

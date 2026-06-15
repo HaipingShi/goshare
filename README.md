@@ -18,6 +18,8 @@
 <p align="center">
   <a href="#用-ai-agent-部署"><strong>AI Agent 部署 Prompt</strong></a>
   ·
+  <a href="#部署前你需要知道"><strong>部署前提</strong></a>
+  ·
   <a href="#agent-api"><strong>Agent API</strong></a>
   ·
   <a href="#本地开发"><strong>本地开发</strong></a>
@@ -36,15 +38,40 @@
 
 你让 AI 写了一个 HTML demo、一段 Markdown 文档、一个 SVG 图标、一个 Mermaid 图，或者一个静态网页 ZIP。
 
-goshare 做一件事：把这些内容放进你自己的 Cloudflare R2/D1/Workers，生成一个干净的 `/view/<id>` 链接。你拥有数据，也拥有部署。
+goshare 做一件事：把这些内容放进你自己的 Cloudflare R2/D1/Workers，生成一个适合转发的 `/share/<id>` H5 分享卡片，并保留正文页 `/view/<id>`。你拥有数据，也拥有部署。
 
 ## 为什么用
 
 - **AI 输出立刻可交付**：不用让内容困在聊天窗口或本地文件里。
 - **数据归你**：正文进 R2，索引、权限和提交数据进 D1。
 - **人和 Agent 都能创建**：网页粘贴生成，或用 Bearer Token 调 Agent API。
+- **转发更像 H5 卡片**：默认分享卡片页，标题摘要可读，正文从卡片进入。
 - **Markdown 好看**：内置字节风格、GitHub、技术文档三种模板。
 - **适合自部署传播**：Deploy Button、`/bootstrap` 和部署 prompt 都已准备好。
+
+## 部署前你需要知道
+
+Cloudflare 可以简单理解成一个把小应用部署到全球边缘节点的云平台。goshare 用到它的 4 个能力：
+
+- **Workers**：运行这个分享站的后端和页面渲染。
+- **R2**：保存你粘贴的 HTML、Markdown、SVG、Mermaid 或 ZIP 正文。
+- **D1**：保存短链、权限、Agent run 和页面提交数据。
+- **Workers AI**：可选，用于“智能美化”内容和生成分享卡片标题摘要。
+
+准备条件：
+
+- **Cloudflare 账号**：必须。没有账号也可以先点 Deploy Button，按 Cloudflare 引导注册。
+- **GitHub 或 GitLab 账号**：建议准备。Deploy Button 会把项目复制到你的代码托管账号，再部署到你的 Cloudflare。
+- **自定义域名**：可选。没有域名也能先用 Cloudflare 分配的 `*.workers.dev` 地址。
+- **本地 Node.js / Wrangler**：可选。只有你想在本地开发或手动部署时才需要。
+- **OpenAI API key**：不需要。本项目的 AI 美化走 Cloudflare Workers AI，不走 OpenAI。
+
+费用归属：
+
+- 点击 Deploy Button 后，Worker、R2、D1、Workers AI 都创建在**部署者自己的 Cloudflare 账号**里。
+- Workers AI 用量也计入**部署者自己的 Cloudflare 账号**，不会消耗本仓库作者的 token 或额度。
+- `AGENT_API_TOKEN` 只是你给 coding agent 调 goshare API 用的访问密码，不是 Cloudflare 计费 token。
+- Cloudflare Workers AI 通常有免费额度；高于免费额度或开启付费计划后的用量，以 Cloudflare 当前价格为准。
 
 ## 一键部署
 
@@ -65,6 +92,9 @@ COOKIE_SECRET=<openssl rand -hex 32>
 AGENT_API_TOKEN=<agent-api-token-for-coding-agents>
 APP_LOGO_URL=/icon/web/icon-512.png
 PUBLIC_SITE_URL=https://your-share-domain.example
+AI_SHARE_METADATA_ENABLED=true
+AI_SHARE_METADATA_MODEL=@cf/zai-org/glm-4.7-flash
+MAX_SHARE_METADATA_CONTENT_KB=24
 ```
 
 ## 用 AI Agent 部署
@@ -94,6 +124,8 @@ PUBLIC_SITE_URL=https://your-share-domain.example
 | HTML / Markdown / SVG / Mermaid | 自动识别并渲染成可分享页面 |
 | 静态 ZIP | 上传构建产物，托管一个轻量静态站 |
 | 访问密码 | 给单条分享开启 5 位数字密码 |
+| H5 分享卡片 | 生成 `/share/<id>` 卡片页，转发时展示标题、摘要和打开入口 |
+| 智能标题摘要 | 可选使用 Workers AI 生成分享卡片标题摘要，不可用时自动规则提取 |
 | Owner 后台 | 当前浏览器只管理自己创建的页面 |
 | 页面提交数据 | 分享页可用 `window.goshare.submit()` 写入 D1 |
 | Agent API | coding agent 可直接创建分享页 |
@@ -132,10 +164,14 @@ curl -X POST "https://your-share-domain.example/api/agent/pages" \
 ```json
 {
   "success": true,
-  "url": "https://your-share-domain.example/view/abc1234",
+  "url": "https://your-share-domain.example/share/abc1234",
+  "cardUrl": "https://your-share-domain.example/share/abc1234",
+  "viewUrl": "https://your-share-domain.example/view/abc1234",
   "urlId": "abc1234",
   "runId": "run_1234567890abcdef12",
   "status": "completed",
+  "title": "Hello goshare",
+  "summary": "Created by an agent.",
   "logs": []
 }
 ```
@@ -170,6 +206,12 @@ paths:
                   enum: [bytedance, github, docs]
                 isProtected:
                   type: boolean
+                title:
+                  type: string
+                  description: Optional title override
+                summary:
+                  type: string
+                  description: Optional summary override
       responses:
         "201":
           description: Page created

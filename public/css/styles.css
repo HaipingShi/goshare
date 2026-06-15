@@ -989,6 +989,14 @@ label[for="html-file"] {
   border: 1px solid var(--border-color);
 }
 
+.result-meta {
+  margin: -0.35rem 0 0.75rem;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
 .result-url {
   flex: 1;
   word-break: break-all;
@@ -1022,6 +1030,10 @@ label[for="html-file"] {
 
 .preview-btn {
   background: linear-gradient(90deg, var(--secondary), var(--secondary));
+}
+
+.share-card-btn {
+  background: linear-gradient(90deg, #2563eb, #0891b2);
 }
 
 .preview-card {

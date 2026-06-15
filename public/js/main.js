@@ -84,9 +84,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const renderPreviewFrame = document.getElementById('render-preview-frame');
   const markdownThemeSelect = document.getElementById('markdown-theme-select');
   const resultSection = document.getElementById('result-section');
+  const resultMeta = document.getElementById('result-meta');
   const resultUrl = document.getElementById('result-url');
   const copyButton = document.getElementById('copy-button');
   const previewButton = document.getElementById('preview-button');
+  const shareCardButton = document.getElementById('share-card-button');
   const loadingIndicator = document.getElementById('loading-indicator');
   const passwordToggle = document.getElementById('password-toggle');
   const passwordInfo = document.getElementById('password-info');
@@ -427,6 +429,16 @@ document.addEventListener('DOMContentLoaded', () => {
         resultSection.style.display = 'none';
         resultSection.classList.remove('fade-in');
       }
+      if (resultMeta) {
+        resultMeta.textContent = '';
+        resultMeta.style.display = 'none';
+      }
+      if (resultUrl) {
+        delete resultUrl.dataset.originalUrl;
+        delete resultUrl.dataset.cardUrl;
+        delete resultUrl.dataset.viewUrl;
+        delete resultUrl.dataset.urlId;
+      }
       if (previewSection) previewSection.hidden = true;
       if (renderPreviewFrame) renderPreviewFrame.srcdoc = '';
       invalidatePreview();
@@ -452,7 +464,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // 更新数据库状态为需要密码才能访问
         try {
-          const urlId = resultUrl.dataset.originalUrl.split('/').pop();
+          const urlId = resultUrl.dataset.urlId || resultUrl.dataset.originalUrl.split('/').pop();
           await fetch(`/api/pages/${urlId}/protect`, {
             method: 'POST',
             headers: {
@@ -470,7 +482,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // 更新数据库状态为不需要密码就能访问
         try {
-          const urlId = resultUrl.dataset.originalUrl.split('/').pop();
+          const urlId = resultUrl.dataset.urlId || resultUrl.dataset.originalUrl.split('/').pop();
           await fetch(`/api/pages/${urlId}/protect`, {
             method: 'POST',
             headers: {
@@ -844,15 +856,26 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('API响应数据:', data); // 调试输出
         
         if (data.success) {
-          const url = `${window.location.origin}/view/${data.urlId}`;
+          const cardUrl = data.cardUrl || data.url || `${window.location.origin}/share/${data.urlId}`;
+          const viewUrl = data.viewUrl || `${window.location.origin}/view/${data.urlId}`;
           
           // 格式化 URL 显示
-          const formattedUrl = formatUrl(url);
+          const formattedUrl = formatUrl(cardUrl);
           if (resultUrl) {
             resultUrl.innerHTML = formattedUrl;
             
             // 保存原始 URL 用于复制和预览
-            resultUrl.dataset.originalUrl = url;
+            resultUrl.dataset.originalUrl = cardUrl;
+            resultUrl.dataset.cardUrl = cardUrl;
+            resultUrl.dataset.viewUrl = viewUrl;
+            resultUrl.dataset.urlId = data.urlId;
+          }
+
+          if (resultMeta) {
+            const title = data.title ? String(data.title) : '分享卡片';
+            const summary = data.summary ? ` · ${data.summary}` : '';
+            resultMeta.textContent = `${title}${summary}`;
+            resultMeta.style.display = 'block';
           }
           
           // 无论是否启用了密码保护，都保存密码
@@ -990,7 +1013,19 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       
-      window.open(resultUrl.dataset.originalUrl, '_blank');
+      window.open(resultUrl.dataset.viewUrl || resultUrl.dataset.originalUrl, '_blank');
+    });
+  }
+
+  // 分享卡片按钮
+  if (shareCardButton) {
+    shareCardButton.addEventListener('click', () => {
+      if (!resultUrl || !resultUrl.dataset.originalUrl) {
+        showErrorToast('没有可打开的分享卡片');
+        return;
+      }
+
+      window.open(resultUrl.dataset.cardUrl || resultUrl.dataset.originalUrl, '_blank');
     });
   }
   

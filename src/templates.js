@@ -49,12 +49,27 @@ function cssString(value) {
   return String(value || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
+function formatShareDate(value) {
+  const timestamp = Number(value);
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return '刚刚发布';
+  return new Date(timestamp).toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
 function appTitleSpans(appName) {
   return appName.split('').map((char) => `<span>${escapeHtml(char)}</span>`).join('');
 }
 
-function head({ title, extraHead = '', env } = {}) {
+function head({ title, extraHead = '', env, defaultOg = true } = {}) {
   const config = getAppConfig(env);
+  const defaultOgTags = defaultOg ? `
+    <meta property="og:title" content="${escapeHtml(config.appName)} | ${escapeHtml(config.appDescription)}">
+    <meta property="og:description" content="一个简单、高效的HTML代码分享平台">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="${escapeHtml(config.logoUrl)}">` : '';
   return `
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -67,10 +82,7 @@ function head({ title, extraHead = '', env } = {}) {
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="${escapeHtml(config.appName)}">
-    <meta property="og:title" content="${escapeHtml(config.appName)} | ${escapeHtml(config.appDescription)}">
-    <meta property="og:description" content="一个简单、高效的HTML代码分享平台">
-    <meta property="og:type" content="website">
-    <meta property="og:image" content="${escapeHtml(config.logoUrl)}">
+    ${defaultOgTags}
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <link rel="stylesheet" href="/css/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/atom-one-dark.min.css">
@@ -86,7 +98,7 @@ function chromeStart(title, options = {}) {
   return `<!DOCTYPE html>
 <html ${htmlAttrs}>
 <head>
-  ${head({ title, extraHead: options.extraHead, env: options.env })}
+  ${head({ title, extraHead: options.extraHead, env: options.env, defaultOg: options.defaultOg })}
 </head>
 <body>
   <div class="app-container">
@@ -243,10 +255,14 @@ export function renderIndexPage(env) {
     </div>
     <div id="result-section" class="card result-card" style="display: none;" aria-live="polite">
       <h3 class="section-title" style="color: var(--primary); font-family: 'Orbitron', sans-serif; margin-bottom: 1rem;">链接已生成</h3>
+      <div id="result-meta" class="result-meta" style="display: none;"></div>
       <div class="result-container">
         <div id="result-url" class="result-url" tabindex="0"></div>
         <div class="action-buttons">
-          <button id="preview-button" class="action-btn preview-btn tooltip micro-interaction" data-tooltip="在新窗口预览" aria-label="在新窗口预览">
+          <button id="share-card-button" class="action-btn share-card-btn tooltip micro-interaction" data-tooltip="打开分享卡片" aria-label="打开分享卡片">
+            <i class="fas fa-id-card" aria-hidden="true"></i>
+          </button>
+          <button id="preview-button" class="action-btn preview-btn tooltip micro-interaction" data-tooltip="打开内容页" aria-label="打开内容页">
             <i class="fas fa-external-link-alt" aria-hidden="true"></i>
           </button>
           <button id="copy-button" class="action-btn tooltip micro-interaction" data-tooltip="复制链接" aria-label="复制链接">
@@ -597,6 +613,248 @@ ${appFooter(env)}
 ${chromeEnd({ includeMain: false })}`;
 }
 
+export function renderShareCardPage({ page, shareUrl, viewUrl }, env) {
+  const config = getAppConfig(env);
+  const title = page.title || page.id;
+  const summary = page.summary || '一份通过 goshare 发布的内容。';
+  const codeType = String(page.code_type || 'html').toUpperCase();
+  const isProtected = page.is_protected === 1 || page.is_protected === true;
+  const createdDate = formatShareDate(page.created_at);
+  const extraHead = `
+    <meta name="description" content="${escapeHtml(summary)}">
+    <meta property="og:title" content="${escapeHtml(title)}">
+    <meta property="og:description" content="${escapeHtml(summary)}">
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="${escapeHtml(shareUrl)}">
+    <meta property="og:image" content="${escapeHtml(config.logoUrl)}">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="${escapeHtml(title)}">
+    <meta name="twitter:description" content="${escapeHtml(summary)}">
+    <style>
+      body[data-page="share-card-page"] {
+        min-height: 100vh;
+        background:
+          radial-gradient(circle at 20% 10%, rgba(99, 102, 241, 0.18), transparent 30%),
+          radial-gradient(circle at 82% 18%, rgba(34, 211, 238, 0.14), transparent 26%),
+          linear-gradient(145deg, #090f1f 0%, #111827 52%, #172033 100%);
+        color: #f8fafc;
+      }
+
+      body[data-page="share-card-page"] .app-container {
+        min-height: 100vh;
+      }
+
+      body[data-page="share-card-page"] .content-container {
+        width: min(100%, 720px);
+        min-height: 100vh;
+        margin: 0 auto;
+        padding: 24px;
+        display: flex;
+        align-items: center;
+      }
+
+      .share-cover {
+        width: 100%;
+      }
+
+      .share-card {
+        position: relative;
+        overflow: hidden;
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        border-radius: 8px;
+        background: rgba(15, 23, 42, 0.84);
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.34);
+        backdrop-filter: blur(18px);
+      }
+
+      .share-card::before {
+        content: "";
+        display: block;
+        height: 6px;
+        background: linear-gradient(90deg, #22d3ee, #6366f1, #f43f5e);
+      }
+
+      .share-card-inner {
+        padding: clamp(24px, 7vw, 48px);
+      }
+
+      .share-brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 40px;
+      }
+
+      .share-logo {
+        width: 44px;
+        height: 44px;
+        border-radius: 8px;
+        object-fit: cover;
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      .share-brand-text {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+
+      .share-app-name {
+        font: 700 0.98rem 'Orbitron', sans-serif;
+        letter-spacing: 0;
+      }
+
+      .share-app-desc {
+        color: #94a3b8;
+        font-size: 0.84rem;
+      }
+
+      .share-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 18px;
+      }
+
+      .share-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 30px;
+        padding: 0 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        color: #cbd5e1;
+        font-size: 0.82rem;
+      }
+
+      .share-title {
+        margin: 0;
+        color: #f8fafc;
+        font-size: clamp(2rem, 7vw, 4rem);
+        line-height: 1.05;
+        letter-spacing: 0;
+        overflow-wrap: anywhere;
+      }
+
+      .share-summary {
+        margin: 18px 0 0;
+        color: #cbd5e1;
+        font-size: clamp(1rem, 3.4vw, 1.22rem);
+        line-height: 1.7;
+        overflow-wrap: anywhere;
+      }
+
+      .share-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 36px;
+      }
+
+      .share-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 44px;
+        padding: 0 18px;
+        border-radius: 8px;
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        color: #f8fafc;
+        background: rgba(255, 255, 255, 0.07);
+        text-decoration: none;
+        cursor: pointer;
+      }
+
+      .share-button.primary {
+        border-color: transparent;
+        background: linear-gradient(135deg, #2563eb, #0891b2);
+      }
+
+      .share-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 28px;
+        color: #94a3b8;
+        font-size: 0.86rem;
+      }
+
+      @media (max-width: 640px) {
+        body[data-page="share-card-page"] .content-container {
+          padding: 16px;
+          align-items: stretch;
+        }
+
+        .share-card {
+          min-height: calc(100vh - 32px);
+          display: flex;
+          align-items: center;
+        }
+
+        .share-actions {
+          flex-direction: column;
+        }
+
+        .share-button {
+          width: 100%;
+        }
+      }
+    </style>`;
+
+  return `${chromeStart(`${title} | ${config.appName}`, { htmlAttrs: 'lang="zh-CN" data-page="share-card-page"', extraHead, env, defaultOg: false })}
+<main class="share-cover" aria-label="分享卡片">
+  <article class="share-card">
+    <div class="share-card-inner">
+      <div class="share-brand">
+        <img class="share-logo" src="${escapeHtml(config.logoUrl)}" alt="${escapeHtml(config.appName)} logo">
+        <div class="share-brand-text">
+          <span class="share-app-name">${escapeHtml(config.appName)}</span>
+          <span class="share-app-desc">${escapeHtml(config.appDescription)}</span>
+        </div>
+      </div>
+      <div class="share-badges">
+        <span class="share-badge"><i class="fas fa-file-code" aria-hidden="true"></i>${escapeHtml(codeType)}</span>
+        <span class="share-badge"><i class="fas ${isProtected ? 'fa-lock' : 'fa-unlock'}" aria-hidden="true"></i>${isProtected ? '需要访问密码' : '公开分享'}</span>
+      </div>
+      <h1 class="share-title">${escapeHtml(title)}</h1>
+      <p class="share-summary">${escapeHtml(summary)}</p>
+      <div class="share-actions">
+        <a class="share-button primary" href="${escapeHtml(viewUrl)}">
+          <i class="fas fa-external-link-alt" aria-hidden="true"></i>
+          <span>打开内容</span>
+        </a>
+        <button class="share-button" type="button" data-copy-share="${escapeHtml(shareUrl)}">
+          <i class="fas fa-copy" aria-hidden="true"></i>
+          <span>复制卡片链接</span>
+        </button>
+      </div>
+      <div class="share-meta">
+        <span>${escapeHtml(createdDate)}</span>
+        <span>${escapeHtml(page.id)}</span>
+      </div>
+    </div>
+  </article>
+</main>
+<script>
+document.querySelector('[data-copy-share]')?.addEventListener('click', async (event) => {
+  const button = event.currentTarget;
+  const link = button.getAttribute('data-copy-share');
+  try {
+    await navigator.clipboard.writeText(link);
+    button.querySelector('span').textContent = '已复制';
+    setTimeout(() => {
+      button.querySelector('span').textContent = '复制卡片链接';
+    }, 1400);
+  } catch {
+    window.prompt('复制链接', link);
+  }
+});
+</script>
+${chromeEnd({ includeMain: false })}`;
+}
+
 export function renderAdminPage(env) {
   const config = getAppConfig(env);
   const extraHead = `
@@ -794,6 +1052,28 @@ export function renderAdminPage(env) {
       .admin-id {
         font-family: 'Fira Code', monospace;
         color: var(--primary-light);
+        font-size: 0.78rem;
+      }
+      .admin-page-title {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        min-width: 180px;
+      }
+      .admin-page-name {
+        color: var(--text-primary);
+        font-weight: 600;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+      }
+      .admin-page-summary {
+        max-width: 320px;
+        color: var(--text-secondary);
+        font-size: 0.78rem;
+        line-height: 1.4;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .admin-badge {
         display: inline-flex;
@@ -933,7 +1213,7 @@ export function renderAdminPage(env) {
           <table class="admin-table">
             <thead>
               <tr>
-                <th>ID</th>
+                <th>标题</th>
                 <th>类型</th>
                 <th>状态</th>
                 <th>大小</th>
