@@ -46,6 +46,27 @@
       },
       "COOKIE_SECRET": {
         "description": "用于签名登录 Cookie 的随机字符串。建议使用 `openssl rand -hex 32` 生成。"
+      },
+      "APP_NAME": {
+        "description": "站点名称，默认 `goshare`。会显示在首页、分享卡片和浏览器标题里。"
+      },
+      "APP_DESCRIPTION": {
+        "description": "站点副标题，默认 `分享 AI 生成内容的最佳方式`。"
+      },
+      "APP_LOGO_URL": {
+        "description": "Logo 图片地址。可先用默认 `/icon/web/icon-512.png`，部署后再替换成自己的公开图片 URL。"
+      },
+      "PUBLIC_SITE_URL": {
+        "description": "站点公开访问地址，例如 `https://share.example.com`。没有自定义域名时可先留空，部署完成后再填 workers.dev 地址。"
+      },
+      "AGENT_API_TOKEN": {
+        "description": "给 Codex、Claude Code 等 coding agent 调用 `/api/agent/pages` 的 Bearer Token。建议作为 Secret 设置。"
+      },
+      "AI_ENABLED": {
+        "description": "是否启用 Cloudflare Workers AI 功能。设置为 `false` 可关闭智能美化。"
+      },
+      "AI_SHARE_METADATA_ENABLED": {
+        "description": "是否启用 AI 生成分享卡片标题和摘要。关闭后会自动从内容里规则提取。"
       }
     }
   }

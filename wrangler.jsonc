@@ -22,8 +22,6 @@
     "APP_NAME": "goshare",
     "APP_DESCRIPTION": "分享 AI 生成内容的最佳方式",
     "APP_LOGO_URL": "/icon/web/icon-512.png",
-    "APP_FOOTER_TEXT": "",
-    "APP_FOOTER_URL": "",
     "APP_REPO_URL": "https://github.com/HaipingShi/goshare",
     "PUBLIC_SITE_URL": "",
     "AUTH_ENABLED": "false",

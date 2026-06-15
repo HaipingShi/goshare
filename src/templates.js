@@ -457,6 +457,30 @@ export function renderBootstrapPage(env) {
         font-size: 0.82rem;
         line-height: 1.6;
       }
+      .bootstrap-field-list {
+        display: grid;
+        gap: 12px;
+        margin: 0;
+      }
+      .bootstrap-field-list div {
+        display: grid;
+        gap: 4px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--border-color);
+      }
+      .bootstrap-field-list div:last-child {
+        padding-bottom: 0;
+        border-bottom: 0;
+      }
+      .bootstrap-field-list dt {
+        color: var(--text-primary);
+        font-weight: 700;
+      }
+      .bootstrap-field-list dd {
+        margin: 0;
+        color: var(--text-secondary);
+        line-height: 1.6;
+      }
       @media (max-width: 860px) {
         .bootstrap-hero,
         .bootstrap-grid {
@@ -524,6 +548,45 @@ export function renderBootstrapPage(env) {
         <li>不要把个人域名、真实数据库 ID 当成模板默认值。</li>
         <li>公开仓库只保留可复制、可替换的示例配置。</li>
       </ul>
+    </article>
+
+    <article class="card bootstrap-card bootstrap-wide">
+      <h2><i class="fas fa-circle-question" aria-hidden="true"></i> Cloudflare 部署表单怎么填</h2>
+      <p>Deploy to Cloudflare 会读取仓库里的 <code>wrangler.jsonc</code>。页面里的字段不是让你买额外服务，而是在为这个 Worker 创建项目、数据库、存储桶和环境变量。</p>
+      <dl class="bootstrap-field-list">
+        <div>
+          <dt>Project name</dt>
+          <dd>Cloudflare Worker 的项目名。建议填 <code>goshare</code> 或你自己的短名称，例如 <code>my-share</code>。这个名字会影响 workers.dev 默认域名。</dd>
+        </div>
+        <div>
+          <dt>Select D1 database</dt>
+          <dd>D1 是 Cloudflare 的轻量数据库，用来保存短链 ID、标题摘要、访问密码状态、owner 和页面提交数据。首次部署选择 <code>Create new</code> 即可。</dd>
+        </div>
+        <div>
+          <dt>R2 bucket / CONTENT_BUCKET</dt>
+          <dd>R2 是对象存储，用来保存用户粘贴的 HTML、Markdown、SVG、Mermaid 或 ZIP 文件正文。首次部署选择创建新 bucket。</dd>
+        </div>
+        <div>
+          <dt>APP_NAME / APP_DESCRIPTION / APP_LOGO_URL</dt>
+          <dd>站点品牌配置。<code>APP_LOGO_URL</code> 可以先保留默认 <code>/icon/web/icon-512.png</code>；如果要用自己的图片，必须是公网可访问 URL。</dd>
+        </div>
+        <div>
+          <dt>PUBLIC_SITE_URL</dt>
+          <dd>站点最终公开地址，例如 <code>https://share.example.com</code>。还没有域名时可以先留空，部署完成后把 workers.dev 地址或自定义域名补进去。</dd>
+        </div>
+        <div>
+          <dt>AUTH_PASSWORD / COOKIE_SECRET / AGENT_API_TOKEN</dt>
+          <dd>这些是 Secret，不建议写进代码仓库。<code>AUTH_PASSWORD</code> 是后台入口密码；<code>COOKIE_SECRET</code> 用于签名登录 Cookie；<code>AGENT_API_TOKEN</code> 给 AI coding agent 调 API 创建分享页。</dd>
+        </div>
+        <div>
+          <dt>AI_ENABLED / AI_SHARE_METADATA_ENABLED</dt>
+          <dd>控制 Cloudflare Workers AI 功能。开启后会消耗部署者自己的 Cloudflare 账号额度；关闭后分享页仍可创建，只是智能美化和 AI 标题摘要不可用或改用规则提取。</dd>
+        </div>
+        <div>
+          <dt>APP_FOOTER_TEXT / APP_FOOTER_URL</dt>
+          <dd>这是可选页脚配置，不需要在首次部署表单里填写。部署完成后，如果你想在页面底部显示品牌、备案号或官网链接，再到 Worker Variables 手动新增即可。</dd>
+        </div>
+      </dl>
     </article>
 
     <article class="card bootstrap-card bootstrap-wide bootstrap-agent-card">

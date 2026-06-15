@@ -97,6 +97,8 @@ AI_SHARE_METADATA_MODEL=@cf/zai-org/glm-4.7-flash
 MAX_SHARE_METADATA_CONTENT_KB=24
 ```
 
+`APP_FOOTER_TEXT` 和 `APP_FOOTER_URL` 是可选页脚配置，首次部署不需要填。部署完成后，如果你想在页面底部显示品牌、备案号或官网链接，再到 Worker Variables 手动新增即可。
+
 ## 用 AI Agent 部署
 
 把下面这段话复制给 Codex、Claude Code 或其他 coding agent，让它陪你完成生产部署。
