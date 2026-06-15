@@ -10,26 +10,40 @@
     "directory": "./public",
     "binding": "ASSETS"
   },
-  "routes": [
-    { "pattern": "goshare.ilihe.shop", "custom_domain": true }
-  ],
+  "ai": {
+    "binding": "AI"
+  },
+  // Bind your own custom domain in the Cloudflare dashboard after deployment.
+  // Example:
+  // "routes": [
+  //   { "pattern": "share.example.com", "custom_domain": true }
+  // ],
   "vars": {
+    "APP_NAME": "goshare",
+    "APP_DESCRIPTION": "分享 AI 生成内容的最佳方式",
+    "APP_LOGO_URL": "/icon/web/icon-512.png",
+    "APP_FOOTER_TEXT": "",
+    "APP_FOOTER_URL": "",
+    "APP_REPO_URL": "https://github.com/HaipingShi/goshare",
+    "PUBLIC_SITE_URL": "",
     "AUTH_ENABLED": "false",
-    "AUTH_PASSWORD": "admin123",
-    "COOKIE_SECRET": "change-me-before-production"
+    "COOKIE_PREFIX": "goshare",
+    "AI_ENABLED": "true",
+    "AI_BEAUTIFY_MODEL": "@cf/zai-org/glm-4.7-flash",
+    "MAX_BEAUTIFY_CONTENT_KB": "120"
   },
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "quickshare-db",
-      "database_id": "fe96df7d-97e2-4cf1-a046-ffe04e86080d",
+      "database_name": "goshare-db",
+      "database_id": "00000000-0000-0000-0000-000000000000",
       "migrations_dir": "migrations"
     }
   ],
   "r2_buckets": [
     {
       "binding": "CONTENT_BUCKET",
-      "bucket_name": "quickshare-content"
+      "bucket_name": "goshare-content"
     }
   ]
 }

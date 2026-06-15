@@ -18,7 +18,7 @@ console.log('当前工作目录:', process.cwd());
 console.log('环境变量:', {
   NODE_ENV: process.env.NODE_ENV,
   AUTH_ENABLED: process.env.AUTH_ENABLED,
-  AUTH_PASSWORD: process.env.AUTH_PASSWORD
+  AUTH_PASSWORD_SET: Boolean(process.env.AUTH_PASSWORD)
 });
 
 // 导入认证中间件
@@ -77,12 +77,12 @@ app.use(session({
     path: sessionDir,
     ttl: 86400, // 会话有效期（秒）
     retries: 0, // 读取会话文件的重试次数
-    secret: 'html-go-secret-key', // 用于加密会话文件
+    secret: process.env.SESSION_SECRET || process.env.COOKIE_SECRET || 'goshare-local-session-secret',
     logFn: function(message) {
       console.log('[session-file-store]', message);
     }
   }),
-  secret: 'html-go-secret-key',
+  secret: process.env.SESSION_SECRET || process.env.COOKIE_SECRET || 'goshare-local-session-secret',
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -106,7 +106,7 @@ app.get('/login', (req, res) => {
   }
 
   res.render('login', {
-    title: 'HTML-Go | 登录',
+    title: `${config.appName} | 登录`,
     error: null
   });
 });
@@ -114,15 +114,23 @@ app.get('/login', (req, res) => {
 app.post('/login', (req, res) => {
   const { password } = req.body;
 
-  console.log('登录尝试:');
-  console.log('- 密码:', password);
-  console.log('- 配置密码:', config.authPassword);
-  console.log('- 密码匹配:', password === config.authPassword);
+  console.log('登录尝试:', {
+    authEnabled: config.authEnabled,
+    passwordProvided: Boolean(password),
+    passwordMatched: password === config.authPassword
+  });
 
   // 如果认证功能未启用，直接重定向到首页
   if (!config.authEnabled) {
     console.log('- 认证未启用，直接重定向到首页');
     return res.redirect('/');
+  }
+
+  if (!config.authPassword) {
+    return res.status(500).render('login', {
+      title: `${config.appName} | 登录`,
+      error: '当前环境未设置 AUTH_PASSWORD。'
+    });
   }
 
   // 检查密码是否正确
@@ -150,7 +158,7 @@ app.post('/login', (req, res) => {
     console.log('- 密码不匹配，显示错误');
     // 密码错误，显示错误信息
     res.render('login', {
-      title: 'HTML-Go | 登录',
+      title: `${config.appName} | 登录`,
       error: '密码错误，请重试'
     });
   }
@@ -230,7 +238,7 @@ app.get('/validate-password/:id', async (req, res) => {
 
 // 首页路由 - 需要登录才能访问
 app.get('/', isAuthenticated, (req, res) => {
-  res.render('index', { title: 'HTML-Go | 分享 HTML 代码的简单方式' });
+  res.render('index', { title: `${config.appName} | 分享 HTML 代码的简单方式` });
 });
 
 // 导入代码类型检测和内容渲染工具
@@ -258,7 +266,7 @@ app.get('/view/:id', async (req, res) => {
       // 如果没有提供密码或密码不正确，显示密码输入页面
       if (!password || password !== page.password) {
         return res.render('password', {
-          title: 'HTML-Go | 密码保护',
+          title: `${config.appName} | 密码保护`,
           id: id,
           error: password ? '密码错误，请重试' : null
         });

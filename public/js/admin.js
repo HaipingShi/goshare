@@ -2,6 +2,7 @@
   const state = {
     pages: [],
     selected: null,
+    submissions: [],
   };
 
   const elements = {
@@ -13,12 +14,16 @@
     selectedId: document.getElementById('admin-selected-id'),
     content: document.getElementById('admin-content'),
     codeType: document.getElementById('admin-code-type'),
+    markdownTheme: document.getElementById('admin-markdown-theme'),
     protected: document.getElementById('admin-protected'),
     open: document.getElementById('admin-open'),
     copy: document.getElementById('admin-copy'),
     save: document.getElementById('admin-save'),
     delete: document.getElementById('admin-delete'),
     password: document.getElementById('admin-password'),
+    submissionsBody: document.getElementById('admin-submissions-body'),
+    submissionsCount: document.getElementById('admin-submissions-count'),
+    submissionsRefresh: document.getElementById('admin-submissions-refresh'),
   };
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -26,6 +31,10 @@
     elements.form?.addEventListener('submit', saveSelectedPage);
     elements.delete?.addEventListener('click', deleteSelectedPage);
     elements.copy?.addEventListener('click', copySelectedLink);
+    elements.submissionsRefresh?.addEventListener('click', () => {
+      if (state.selected) loadSubmissions(state.selected.id);
+    });
+    elements.codeType?.addEventListener('change', updateMarkdownThemeControl);
     loadPages();
   });
 
@@ -112,6 +121,7 @@
       state.selected = data.page;
       renderRows();
       fillForm(data.page);
+      await loadSubmissions(data.page.id);
     } catch (error) {
       showError(error.message);
     }
@@ -122,16 +132,19 @@
     elements.selectedId.textContent = page.id;
     elements.content.value = page.htmlContent || '';
     elements.codeType.value = page.code_type || 'html';
+    elements.markdownTheme.value = page.markdown_theme || 'bytedance';
     elements.protected.checked = page.is_protected === 1 || page.is_protected === true;
     elements.open.href = url;
     elements.open.setAttribute('aria-disabled', 'false');
     elements.password.textContent = page.password ? `访问密码：${page.password}` : '';
 
     setFormDisabled(false);
+    updateMarkdownThemeControl();
 
     if (page.code_type === 'zip') {
       elements.content.disabled = true;
       elements.codeType.disabled = true;
+      elements.markdownTheme.disabled = true;
     }
   }
 
@@ -140,20 +153,73 @@
     elements.selectedId.textContent = '未选择';
     elements.content.value = '';
     elements.codeType.value = 'html';
+    elements.markdownTheme.value = 'bytedance';
     elements.protected.checked = false;
     elements.open.href = '#';
     elements.open.setAttribute('aria-disabled', 'true');
     elements.password.textContent = '';
+    state.submissions = [];
+    renderSubmissionsEmpty('从左侧选择一条内容', '未选择');
     setFormDisabled(true);
   }
 
   function setFormDisabled(disabled) {
     elements.content.disabled = disabled;
     elements.codeType.disabled = disabled;
+    elements.markdownTheme.disabled = disabled || elements.codeType.value !== 'markdown';
     elements.protected.disabled = disabled;
     elements.copy.disabled = disabled;
     elements.save.disabled = disabled;
     elements.delete.disabled = disabled;
+    elements.submissionsRefresh.disabled = disabled;
+  }
+
+  async function loadSubmissions(pageId) {
+    if (!pageId) {
+      renderSubmissionsEmpty('从左侧选择一条内容', '未选择');
+      return;
+    }
+
+    renderSubmissionsLoading();
+
+    try {
+      const response = await fetch(`/api/admin/pages/${encodeURIComponent(pageId)}/submissions?limit=50`);
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || '加载提交数据失败');
+
+      state.submissions = data.submissions || [];
+      renderSubmissions();
+    } catch (error) {
+      renderSubmissionsEmpty(error.message || '加载提交数据失败', '加载失败');
+    }
+  }
+
+  function renderSubmissionsLoading() {
+    elements.submissionsCount.textContent = '加载中';
+    elements.submissionsBody.innerHTML = '<tr><td class="admin-loading" colspan="3">加载中...</td></tr>';
+  }
+
+  function renderSubmissionsEmpty(message, countText = '0 条') {
+    elements.submissionsCount.textContent = countText;
+    elements.submissionsBody.innerHTML = `<tr><td class="admin-empty" colspan="3">${escapeHtml(message)}</td></tr>`;
+  }
+
+  function renderSubmissions() {
+    elements.submissionsCount.textContent = `${state.submissions.length} 条`;
+
+    if (!state.submissions.length) {
+      renderSubmissionsEmpty('还没有提交数据');
+      return;
+    }
+
+    elements.submissionsBody.innerHTML = state.submissions.map((submission) => {
+      const payloadText = formatPayload(submission.payload);
+      return `<tr>
+        <td>${formatDate(submission.createdAt)}</td>
+        <td>${escapeHtml(submission.kind || 'submission')}</td>
+        <td><pre class="admin-submission-payload">${escapeHtml(payloadText)}</pre></td>
+      </tr>`;
+    }).join('');
   }
 
   async function saveSelectedPage(event) {
@@ -175,6 +241,7 @@
         body: JSON.stringify({
           htmlContent,
           codeType: elements.codeType.value,
+          markdownTheme: elements.markdownTheme.value,
           isProtected: elements.protected.checked,
         }),
       });
@@ -259,6 +326,14 @@
     return `${size.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
   }
 
+  function formatPayload(payload) {
+    try {
+      return JSON.stringify(payload, null, 2);
+    } catch {
+      return String(payload || '');
+    }
+  }
+
   function escapeHtml(value = '') {
     return String(value)
       .replace(/&/g, '&amp;')
@@ -266,5 +341,10 @@
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
+  }
+
+  function updateMarkdownThemeControl() {
+    if (!elements.markdownTheme || !elements.codeType) return;
+    elements.markdownTheme.disabled = elements.codeType.disabled || elements.codeType.value !== 'markdown';
   }
 })();

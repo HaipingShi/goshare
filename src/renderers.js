@@ -10,6 +10,19 @@ export const CODE_TYPES = {
   UNKNOWN: 'unknown',
 };
 
+export const MARKDOWN_THEMES = {
+  BYTEDANCE: 'bytedance',
+  GITHUB: 'github',
+  DOCS: 'docs',
+};
+
+const VALID_MARKDOWN_THEMES = new Set(Object.values(MARKDOWN_THEMES));
+
+export function normalizeMarkdownTheme(theme) {
+  const value = String(theme || '').trim().toLowerCase();
+  return VALID_MARKDOWN_THEMES.has(value) ? value : MARKDOWN_THEMES.BYTEDANCE;
+}
+
 export function detectCodeType(code) {
   if (!code || typeof code !== 'string') return CODE_TYPES.UNKNOWN;
 
@@ -116,18 +129,18 @@ export function extractCodeBlocks(content) {
   return blocks;
 }
 
-export async function renderContent(content, contentType) {
+export async function renderContent(content, contentType, options = {}) {
   switch (contentType) {
     case CODE_TYPES.HTML:
       return renderHtml(content);
     case CODE_TYPES.MARKDOWN:
-      return renderMarkdown(content);
+      return renderMarkdown(content, options.markdownTheme);
     case CODE_TYPES.SVG:
       return renderSvg(content);
     case CODE_TYPES.MERMAID:
       return renderMermaid(content);
     default:
-      return renderMarkdown(content);
+      return renderMarkdown(content, options.markdownTheme);
   }
 }
 
@@ -236,7 +249,7 @@ function renderHtml(content) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HTML-GO 查看器</title>
+  <title>goshare 查看器</title>
   ${viewerIcons()}
   <link rel="stylesheet" href="/css/styles.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/atom-one-dark.min.css">
@@ -282,7 +295,8 @@ function renderHtml(content) {
 </html>`;
 }
 
-function renderMarkdown(content) {
+function renderMarkdown(content, theme) {
+  const markdownTheme = normalizeMarkdownTheme(theme);
   const renderer = new marked.Renderer();
   const originalCodeRenderer = renderer.code.bind(renderer);
 
@@ -318,9 +332,9 @@ function renderMarkdown(content) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HTML-GO Markdown查看器</title>
+  <title>goshare Markdown查看器</title>
   ${viewerIcons()}
-  <link rel="stylesheet" href="/css/markdown-bytedance.css">
+  <link rel="stylesheet" href="${getMarkdownThemeStylesheet(markdownTheme)}">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/atom-one-dark.min.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -331,6 +345,7 @@ function renderMarkdown(content) {
       padding: 0;
       background-color: #f5f5f7;
     }
+    ${getMarkdownThemePageStyles(markdownTheme)}
     .embedded-svg-container {
       margin: 20px 0;
       overflow: auto;
@@ -370,8 +385,8 @@ function renderMarkdown(content) {
   </style>
   ${mermaidRuntimeScript()}
 </head>
-<body>
-  <div class="markdown-body">
+<body class="markdown-page markdown-page-${markdownTheme}">
+  <div class="markdown-body markdown-theme-${markdownTheme}">
     ${htmlContent}
   </div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
@@ -384,13 +399,53 @@ function renderMarkdown(content) {
 </html>`;
 }
 
+function getMarkdownThemeStylesheet(theme) {
+  switch (normalizeMarkdownTheme(theme)) {
+    case MARKDOWN_THEMES.GITHUB:
+      return '/css/markdown-themes/github.css';
+    case MARKDOWN_THEMES.DOCS:
+      return '/css/markdown-themes/docs.css';
+    case MARKDOWN_THEMES.BYTEDANCE:
+    default:
+      return '/css/markdown-bytedance.css';
+  }
+}
+
+function getMarkdownThemePageStyles(theme) {
+  switch (normalizeMarkdownTheme(theme)) {
+    case MARKDOWN_THEMES.GITHUB:
+      return `
+    body.markdown-page-github {
+      background-color: #f6f8fa;
+    }
+    @media (prefers-color-scheme: dark) {
+      body.markdown-page-github {
+        background-color: #0d1117;
+      }
+    }`;
+    case MARKDOWN_THEMES.DOCS:
+      return `
+    body.markdown-page-docs {
+      background-color: #f6f8fb;
+    }
+    @media (prefers-color-scheme: dark) {
+      body.markdown-page-docs {
+        background-color: #111827;
+      }
+    }`;
+    case MARKDOWN_THEMES.BYTEDANCE:
+    default:
+      return '';
+  }
+}
+
 function renderSvg(content) {
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HTML-GO SVG查看器</title>
+  <title>goshare SVG查看器</title>
   ${viewerIcons()}
   <style>
     body {
@@ -447,7 +502,7 @@ function renderMermaid(content) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HTML-GO Mermaid查看器</title>
+  <title>goshare Mermaid查看器</title>
   ${viewerIcons()}
   <script src="https://cdn.jsdelivr.net/npm/mermaid@11.6.0/dist/mermaid.min.js"></script>
   <style>
@@ -631,7 +686,7 @@ function viewerIcons() {
   <meta name="theme-color" content="#6366f1">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="HTML-GO">`;
+  <meta name="apple-mobile-web-app-title" content="goshare">`;
 }
 
 function mermaidRuntimeScript() {

@@ -19,7 +19,11 @@ coverage/
 
 # 环境变量文件
 .env
+.env.*
+!.env.example
 .dev.vars
+.dev.vars.*
+!.dev.vars.example
 .env.local
 .env.development.local
 .env.test.local
@@ -44,3 +48,8 @@ Thumbs.db
 .vscode/
 *.swp
 *.swo
+
+# Local agent memory / automation state
+.claude/
+.remember/
+.agent/

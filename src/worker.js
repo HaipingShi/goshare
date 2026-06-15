@@ -5,19 +5,25 @@ import {
   renderIndexPage,
   renderLoginPage,
   renderPasswordPage,
+  renderBootstrapPage,
 } from './templates.js';
 import {
   CODE_TYPES,
   detectCodeType,
   normalizeContentForRendering,
+  normalizeMarkdownTheme,
   renderContent,
 } from './renderers.js';
 
-const AUTH_COOKIE = 'quickshare_auth';
-const OWNER_COOKIE = 'quickshare_owner';
+const DEFAULT_COOKIE_PREFIX = 'quickshare';
 const AUTH_TTL_SECONDS = 24 * 60 * 60;
 const OWNER_TTL_SECONDS = 60 * 60 * 24 * 365 * 2;
 const MAX_CONTENT_LENGTH = 10 * 1024 * 1024;
+const MAX_PREVIEW_CONTENT_LENGTH = 512 * 1024;
+const DEFAULT_MAX_BEAUTIFY_CONTENT_LENGTH = 120 * 1024;
+const MAX_SUBMISSION_PAYLOAD_LENGTH = 64 * 1024;
+const MAX_SUBMISSION_KIND_LENGTH = 40;
+const DEFAULT_BEAUTIFY_MODEL = '@cf/zai-org/glm-4.7-flash';
 const VALID_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
 const VALID_CODE_TYPES = new Set([
   CODE_TYPES.HTML,
@@ -36,7 +42,7 @@ export default {
       return htmlResponse(renderErrorPage({
         title: '服务器错误',
         message: '处理请求时发生错误，请稍后再试',
-      }), 500);
+      }, env), 500);
     }
   },
 };
@@ -53,7 +59,11 @@ async function handleRequest(request, env) {
     if (!(await isAuthenticated(request, env))) {
       return redirect('/login');
     }
-    return htmlResponse(renderIndexPage());
+    return htmlResponse(renderIndexPage(env));
+  }
+
+  if (pathname === '/bootstrap' && request.method === 'GET') {
+    return htmlResponse(renderBootstrapPage(env));
   }
 
   if (pathname === '/admin' && request.method === 'GET') {
@@ -61,14 +71,14 @@ async function handleRequest(request, env) {
       return redirect('/login');
     }
     const owner = await getOwnerContext(request, env);
-    return htmlResponse(renderAdminPage(), 200, owner.cookieHeader ? { 'Set-Cookie': owner.cookieHeader } : {});
+    return htmlResponse(renderAdminPage(env), 200, owner.cookieHeader ? { 'Set-Cookie': owner.cookieHeader } : {});
   }
 
   if (pathname === '/login' && request.method === 'GET') {
     if (!isAuthEnabled(env) || (await isAuthenticated(request, env))) {
       return redirect('/');
     }
-    return htmlResponse(renderLoginPage());
+    return htmlResponse(renderLoginPage({}, env));
   }
 
   if (pathname === '/login' && request.method === 'POST') {
@@ -77,13 +87,23 @@ async function handleRequest(request, env) {
 
   if (pathname === '/logout' && request.method === 'GET') {
     return redirect('/login', {
-      'Set-Cookie': clearAuthCookie(),
+      'Set-Cookie': clearAuthCookie(env),
     });
   }
 
   if (pathname === '/api/pages/create' && request.method === 'POST') {
     if (!(await isAuthenticated(request, env))) return unauthorizedJson();
     return createPage(request, env);
+  }
+
+  if (pathname === '/api/pages/preview' && request.method === 'POST') {
+    if (!(await isAuthenticated(request, env))) return unauthorizedJson();
+    return previewPage(request, env);
+  }
+
+  if (pathname === '/api/pages/beautify' && request.method === 'POST') {
+    if (!(await isAuthenticated(request, env))) return unauthorizedJson();
+    return beautifyPage(request, env);
   }
 
   if (pathname === '/api/pages/list/recent' && request.method === 'GET') {
@@ -93,6 +113,12 @@ async function handleRequest(request, env) {
   if (pathname === '/api/admin/pages' && request.method === 'GET') {
     if (!(await isAuthenticated(request, env))) return unauthorizedJson();
     return listOwnedPages(request, env);
+  }
+
+  const adminSubmissionsMatch = pathname.match(/^\/api\/admin\/pages\/([^/]+)\/submissions$/);
+  if (adminSubmissionsMatch && request.method === 'GET') {
+    if (!(await isAuthenticated(request, env))) return unauthorizedJson();
+    return listOwnedPageSubmissions(request, env, adminSubmissionsMatch[1]);
   }
 
   const adminPageMatch = pathname.match(/^\/api\/admin\/pages\/([^/]+)$/);
@@ -115,6 +141,11 @@ async function handleRequest(request, env) {
   if (protectMatch && request.method === 'POST') {
     if (!(await isAuthenticated(request, env))) return unauthorizedJson();
     return updateProtection(request, env, protectMatch[1]);
+  }
+
+  const submissionsMatch = pathname.match(/^\/api\/pages\/([^/]+)\/submissions$/);
+  if (submissionsMatch && request.method === 'POST') {
+    return createPageSubmission(request, env, submissionsMatch[1]);
   }
 
   const apiPageMatch = pathname.match(/^\/api\/pages\/([^/]+)$/);
@@ -142,7 +173,7 @@ async function handleRequest(request, env) {
   return htmlResponse(renderErrorPage({
     title: '页面未找到',
     message: '您请求的页面不存在',
-  }), 404);
+  }, env), 404);
 }
 
 async function handleLogin(request, env) {
@@ -150,14 +181,19 @@ async function handleLogin(request, env) {
 
   const formData = await request.formData();
   const password = String(formData.get('password') || '');
+  const expectedPassword = getAuthPassword(env);
 
-  if (password === getAuthPassword(env)) {
+  if (!expectedPassword) {
+    return htmlResponse(renderLoginPage({ error: '当前环境未设置 AUTH_PASSWORD。' }, env), 500);
+  }
+
+  if (password === expectedPassword) {
     return redirect('/', {
       'Set-Cookie': await createAuthCookie(request, env),
     });
   }
 
-  return htmlResponse(renderLoginPage({ error: '密码错误，请重试' }), 401);
+  return htmlResponse(renderLoginPage({ error: '密码错误，请重试' }, env), 401);
 }
 
 async function createPage(request, env) {
@@ -179,6 +215,9 @@ async function createPage(request, env) {
   const codeType = VALID_CODE_TYPES.has(requestedCodeType)
     ? requestedCodeType
     : normalizeDetectedCodeType(detectCodeType(htmlContent));
+  const markdownTheme = codeType === CODE_TYPES.MARKDOWN
+    ? normalizeMarkdownTheme(payload.markdownTheme)
+    : normalizeMarkdownTheme();
 
   if (codeType === 'zip') {
     if (!zipContent) {
@@ -291,10 +330,10 @@ async function createPage(request, env) {
       }
 
       await env.DB.prepare(`
-        INSERT INTO pages (id, r2_key, created_at, updated_at, owner_key, password, is_protected, code_type, content_size, content_sha256)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO pages (id, r2_key, created_at, updated_at, owner_key, password, is_protected, code_type, markdown_theme, content_size, content_sha256)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
-        .bind(urlId, r2Key, createdAt, updatedAt, owner.ownerKey, password, isProtected ? 1 : 0, codeType, contentSize, contentHash)
+        .bind(urlId, r2Key, createdAt, updatedAt, owner.ownerKey, password, isProtected ? 1 : 0, codeType, markdownTheme, contentSize, contentHash)
         .run();
 
       return jsonResponse({
@@ -312,6 +351,108 @@ async function createPage(request, env) {
   }
 
   return jsonResponse({ success: false, error: '创建页面失败' }, 500);
+}
+
+async function previewPage(request, env) {
+  assertBindings(env);
+
+  const payload = await readJsonPayload(request);
+  if (!payload.ok) return payload.response;
+
+  const input = parseTextContentPayload(payload.data);
+  if (!input.ok) return input.response;
+
+  if (input.content.length > MAX_PREVIEW_CONTENT_LENGTH) {
+    return jsonResponse({ success: false, error: '预览内容过大，请控制在512KB以内' }, 413);
+  }
+
+  if (input.codeType === CODE_TYPES.ZIP) {
+    return jsonResponse({ success: false, error: 'ZIP 静态网站暂不支持内嵌预览，请直接生成链接后打开查看。' }, 400);
+  }
+
+  const normalized = normalizeContentForRendering(input.content, input.codeType);
+  const renderedContent = await renderContent(normalized.content, normalized.contentType, {
+    markdownTheme: input.markdownTheme,
+  });
+  const html = injectCodeTypeMeta(renderedContent, normalized.contentType || input.codeType);
+
+  return jsonResponse({
+    success: true,
+    codeType: normalized.contentType || input.codeType,
+    markdownTheme: input.markdownTheme,
+    html,
+  });
+}
+
+async function beautifyPage(request, env) {
+  assertBindings(env);
+  if (String(env.AI_ENABLED || 'true').toLowerCase() === 'false') {
+    return jsonResponse({ success: false, error: '当前环境未启用智能美化。' }, 403);
+  }
+  if (!env.AI) {
+    return jsonResponse({ success: false, error: '当前环境未配置 Cloudflare Workers AI binding。' }, 501);
+  }
+
+  const payload = await readJsonPayload(request);
+  if (!payload.ok) return payload.response;
+
+  const input = parseTextContentPayload(payload.data);
+  if (!input.ok) return input.response;
+
+  if (input.codeType === CODE_TYPES.ZIP) {
+    return jsonResponse({ success: false, error: 'ZIP 静态网站暂不支持智能美化。' }, 400);
+  }
+
+  const maxBeautifyContentLength = getMaxBeautifyContentLength(env);
+  if (input.content.length > maxBeautifyContentLength) {
+    return jsonResponse({ success: false, error: `智能美化内容过大，请控制在${Math.floor(maxBeautifyContentLength / 1024)}KB以内。` }, 413);
+  }
+
+  const model = String(env.AI_BEAUTIFY_MODEL || DEFAULT_BEAUTIFY_MODEL);
+  const prompt = buildBeautifyPrompt(input.content, input.codeType);
+
+  let aiResult;
+  try {
+    aiResult = await env.AI.run(model, {
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a senior frontend designer. Return only valid JSON.',
+        },
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
+      temperature: 0.35,
+      max_completion_tokens: 4096,
+    });
+  } catch (error) {
+    console.error('AI beautify failed:', error);
+    return jsonResponse({ success: false, error: '智能美化调用失败，请稍后重试。' }, 502);
+  }
+
+  const parsed = parseBeautifyResult(aiResult);
+  if (!parsed.ok) {
+    return jsonResponse({ success: false, error: parsed.error }, 502);
+  }
+
+  const normalizedCodeType = normalizeDetectedCodeType(parsed.value.codeType || CODE_TYPES.HTML);
+  const beautifiedContent = String(parsed.value.content || '').trim();
+  if (!beautifiedContent) {
+    return jsonResponse({ success: false, error: '智能美化未返回可用内容。' }, 502);
+  }
+
+  if (beautifiedContent.length > MAX_CONTENT_LENGTH) {
+    return jsonResponse({ success: false, error: '智能美化结果过大，无法保存。' }, 413);
+  }
+
+  return jsonResponse({
+    success: true,
+    codeType: normalizedCodeType,
+    htmlContent: beautifiedContent,
+    warnings: Array.isArray(parsed.value.warnings) ? parsed.value.warnings.slice(0, 5) : [],
+  });
 }
 
 async function listRecentPages(request, env) {
@@ -417,6 +558,42 @@ async function getOwnedPage(request, env, id) {
   }, 200, owner.cookieHeader ? { 'Set-Cookie': owner.cookieHeader } : {});
 }
 
+async function listOwnedPageSubmissions(request, env, id) {
+  assertBindings(env);
+  if (!isValidId(id)) {
+    return jsonResponse({ success: false, error: '页面不存在' }, 404);
+  }
+
+  const owner = await getOwnerContext(request, env);
+  const page = await getOwnedPageRecord(env, id, owner.ownerKey);
+  if (!page) {
+    return jsonResponse({ success: false, error: '页面不存在' }, 404);
+  }
+
+  const url = new URL(request.url);
+  const limit = Math.min(Math.max(Number.parseInt(url.searchParams.get('limit') || '50', 10), 1), 200);
+  const result = await env.DB.prepare(`
+    SELECT id, page_id, created_at, kind, payload_json
+    FROM page_submissions
+    WHERE page_id = ?
+    ORDER BY created_at DESC
+    LIMIT ?
+  `)
+    .bind(id, limit)
+    .all();
+
+  return jsonResponse({
+    success: true,
+    submissions: (result.results || []).map((submission) => ({
+      id: submission.id,
+      pageId: submission.page_id,
+      createdAt: submission.created_at,
+      kind: submission.kind,
+      payload: parseStoredJson(submission.payload_json),
+    })),
+  }, 200, owner.cookieHeader ? { 'Set-Cookie': owner.cookieHeader } : {});
+}
+
 async function updateOwnedPage(request, env, id) {
   assertBindings(env);
   if (!isValidId(id)) {
@@ -457,6 +634,9 @@ async function updateOwnedPage(request, env, id) {
   const codeType = VALID_CODE_TYPES.has(requestedCodeType)
     ? requestedCodeType
     : normalizeDetectedCodeType(detectCodeType(htmlContent));
+  const markdownTheme = codeType === CODE_TYPES.MARKDOWN
+    ? normalizeMarkdownTheme(payload.markdownTheme)
+    : normalizeMarkdownTheme();
 
   if (!htmlContent) {
     return jsonResponse({ success: false, error: '内容不能为空' }, 400);
@@ -481,10 +661,10 @@ async function updateOwnedPage(request, env, id) {
 
   await env.DB.prepare(`
     UPDATE pages
-    SET updated_at = ?, is_protected = ?, code_type = ?, content_size = ?, content_sha256 = ?
+    SET updated_at = ?, is_protected = ?, code_type = ?, markdown_theme = ?, content_size = ?, content_sha256 = ?
     WHERE id = ? AND owner_key = ?
   `)
-    .bind(updatedAt, payload.isProtected ? 1 : 0, codeType, contentSize, contentHash, id, owner.ownerKey)
+    .bind(updatedAt, payload.isProtected ? 1 : 0, codeType, markdownTheme, contentSize, contentHash, id, owner.ownerKey)
     .run();
 
   return jsonResponse({
@@ -517,6 +697,10 @@ async function deleteOwnedPage(request, env, id) {
     await env.CONTENT_BUCKET.delete(page.r2_key);
   }
 
+  await env.DB.prepare('DELETE FROM page_submissions WHERE page_id = ?')
+    .bind(id)
+    .run();
+
   await env.DB.prepare('DELETE FROM pages WHERE id = ? AND owner_key = ?')
     .bind(id, owner.ownerKey)
     .run();
@@ -525,6 +709,54 @@ async function deleteOwnedPage(request, env, id) {
     success: true,
     message: '删除成功',
   }, 200, owner.cookieHeader ? { 'Set-Cookie': owner.cookieHeader } : {});
+}
+
+async function createPageSubmission(request, env, id) {
+  assertBindings(env);
+  if (!isValidId(id)) {
+    return jsonResponse({ success: false, error: '页面不存在' }, 404);
+  }
+
+  const page = await getPageRecord(env, id);
+  if (!page) {
+    return jsonResponse({ success: false, error: '页面不存在' }, 404);
+  }
+
+  if (page.code_type === CODE_TYPES.ZIP) {
+    return jsonResponse({ success: false, error: 'ZIP 静态网站暂不支持内置数据提交。' }, 400);
+  }
+
+  if (!(await canSubmitToPage(request, env, page))) {
+    return jsonResponse({ success: false, error: '此页面需要先通过访问密码验证。' }, 403);
+  }
+
+  const payload = await readJsonPayload(request);
+  if (!payload.ok) return payload.response;
+
+  const parsed = parseSubmissionPayload(payload.data);
+  if (!parsed.ok) return parsed.response;
+
+  const createdAt = Date.now();
+  const submissionId = await generateSubmissionId(id, createdAt);
+  const submitterKey = await getSubmitterKey(request, env);
+  const userAgent = String(request.headers.get('User-Agent') || '').slice(0, 200);
+
+  await env.DB.prepare(`
+    INSERT INTO page_submissions (id, page_id, created_at, kind, payload_json, submitter_key, user_agent)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `)
+    .bind(submissionId, id, createdAt, parsed.kind, parsed.payloadJson, submitterKey, userAgent)
+    .run();
+
+  return jsonResponse({
+    success: true,
+    submission: {
+      id: submissionId,
+      pageId: id,
+      createdAt,
+      kind: parsed.kind,
+    },
+  }, 201);
 }
 
 async function getPageInfo(env, id) {
@@ -544,6 +776,7 @@ async function getPageInfo(env, id) {
       id: page.id,
       createdAt: page.created_at,
       codeType: page.code_type,
+      markdownTheme: page.markdown_theme,
       size: page.content_size,
     },
   });
@@ -571,7 +804,7 @@ async function viewPage(request, env, id, subpath = '') {
     return htmlResponse(renderErrorPage({
       title: '页面未找到',
       message: '您请求的页面不存在或已被删除',
-    }), 404);
+    }, env), 404);
   }
 
   const url = new URL(request.url);
@@ -581,20 +814,20 @@ async function viewPage(request, env, id, subpath = '') {
     return htmlResponse(renderErrorPage({
       title: '页面未找到',
       message: '您请求的页面不存在或已被删除',
-    }), 404);
+    }, env), 404);
   }
 
   let passwordValidated = false;
   if (page.is_protected === 1) {
     const passwordFromUrl = url.searchParams.get('password');
-    const passwordFromCookie = getCookie(request, `quickshare_pw_${id}`);
+    const passwordFromCookie = getCookie(request, getPagePasswordCookieName(env, id));
     const password = passwordFromUrl || passwordFromCookie;
 
     if (!password || password !== page.password) {
       return htmlResponse(renderPasswordPage({
         id,
         error: passwordFromUrl ? '密码错误，请重试' : null,
-      }), passwordFromUrl ? 401 : 200);
+      }, env), passwordFromUrl ? 401 : 200);
     }
 
     if (passwordFromUrl === page.password) {
@@ -619,7 +852,7 @@ async function viewPage(request, env, id, subpath = '') {
       return htmlResponse(renderErrorPage({
         title: '文件未找到',
         message: `您请求的文件 ${fileSubpath} 不存在`,
-      }), 404);
+      }, env), 404);
     }
 
     const fileData = await object.arrayBuffer();
@@ -638,13 +871,18 @@ async function viewPage(request, env, id, subpath = '') {
       return htmlResponse(renderErrorPage({
         title: '内容未找到',
         message: '页面元数据存在，但 R2 中的内容对象不存在',
-      }), 500);
+      }, env), 500);
     }
 
     const rawContent = await object.text();
     const normalized = normalizeContentForRendering(rawContent, page.code_type);
-    const renderedContent = await renderContent(normalized.content, normalized.contentType);
-    const contentWithTypeInfo = injectCodeTypeMeta(renderedContent, normalized.contentType || page.code_type);
+    const renderedContent = await renderContent(normalized.content, normalized.contentType, {
+      markdownTheme: page.markdown_theme,
+    });
+    const contentWithTypeInfo = injectGoshareDataSdk(
+      injectCodeTypeMeta(renderedContent, normalized.contentType || page.code_type),
+      page.id,
+    );
 
     response = htmlResponse(contentWithTypeInfo);
   }
@@ -653,7 +891,7 @@ async function viewPage(request, env, id, subpath = '') {
     const secure = url.protocol === 'https:' ? '; Secure' : '';
     response.headers.append(
       'Set-Cookie',
-      `quickshare_pw_${id}=${page.password}; Max-Age=86400; Path=/view/${id}/; HttpOnly; SameSite=Lax${secure}`
+      `${getPagePasswordCookieName(env, id)}=${page.password}; Max-Age=86400; Path=/view/${id}/; HttpOnly; SameSite=Lax${secure}`
     );
   }
 
@@ -662,7 +900,7 @@ async function viewPage(request, env, id, subpath = '') {
 
 async function getPageRecord(env, id) {
   return env.DB.prepare(`
-    SELECT id, r2_key, created_at, COALESCE(updated_at, created_at) AS updated_at, owner_key, password, is_protected, code_type, content_size, content_sha256
+    SELECT id, r2_key, created_at, COALESCE(updated_at, created_at) AS updated_at, owner_key, password, is_protected, code_type, COALESCE(markdown_theme, 'bytedance') AS markdown_theme, content_size, content_sha256
     FROM pages
     WHERE id = ?
   `)
@@ -672,12 +910,192 @@ async function getPageRecord(env, id) {
 
 async function getOwnedPageRecord(env, id, ownerKey) {
   return env.DB.prepare(`
-    SELECT id, r2_key, created_at, COALESCE(updated_at, created_at) AS updated_at, owner_key, password, is_protected, code_type, content_size, content_sha256
+    SELECT id, r2_key, created_at, COALESCE(updated_at, created_at) AS updated_at, owner_key, password, is_protected, code_type, COALESCE(markdown_theme, 'bytedance') AS markdown_theme, content_size, content_sha256
     FROM pages
     WHERE id = ? AND owner_key = ?
   `)
     .bind(id, ownerKey)
     .first();
+}
+
+async function readJsonPayload(request) {
+  try {
+    return {
+      ok: true,
+      data: await request.json(),
+    };
+  } catch {
+    return {
+      ok: false,
+      response: jsonResponse({ success: false, error: '请求格式错误' }, 400),
+    };
+  }
+}
+
+function parseTextContentPayload(payload) {
+  const htmlContent = String(payload.htmlContent || '').trim();
+  const requestedCodeType = String(payload.codeType || '');
+  const codeType = VALID_CODE_TYPES.has(requestedCodeType)
+    ? requestedCodeType
+    : normalizeDetectedCodeType(detectCodeType(htmlContent));
+
+  if (!htmlContent) {
+    return {
+      ok: false,
+      response: jsonResponse({ success: false, error: '请提供可预览的内容' }, 400),
+    };
+  }
+
+  return {
+    ok: true,
+    content: htmlContent,
+    codeType,
+    markdownTheme: normalizeMarkdownTheme(payload.markdownTheme),
+  };
+}
+
+function parseSubmissionPayload(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return {
+      ok: false,
+      response: jsonResponse({ success: false, error: '提交数据必须是 JSON 对象' }, 400),
+    };
+  }
+
+  const kind = normalizeSubmissionKind(payload.kind);
+  const data = Object.prototype.hasOwnProperty.call(payload, 'data') ? payload.data : payload;
+  if (!data || typeof data !== 'object') {
+    return {
+      ok: false,
+      response: jsonResponse({ success: false, error: '提交内容必须是对象或数组' }, 400),
+    };
+  }
+
+  let payloadJson;
+  try {
+    payloadJson = JSON.stringify(data);
+  } catch {
+    return {
+      ok: false,
+      response: jsonResponse({ success: false, error: '提交内容无法序列化' }, 400),
+    };
+  }
+
+  if (!payloadJson || payloadJson.length > MAX_SUBMISSION_PAYLOAD_LENGTH) {
+    return {
+      ok: false,
+      response: jsonResponse({ success: false, error: '提交内容过大，请控制在64KB以内' }, 413),
+    };
+  }
+
+  return {
+    ok: true,
+    kind,
+    payloadJson,
+  };
+}
+
+function normalizeSubmissionKind(value) {
+  const kind = String(value || 'submission')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, MAX_SUBMISSION_KIND_LENGTH);
+  return kind || 'submission';
+}
+
+function parseStoredJson(value) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+function buildBeautifyPrompt(content, codeType) {
+  return `You are a senior frontend designer improving a one-off share page.
+
+Return ONLY valid JSON with this shape:
+{"codeType":"html","content":"<complete standalone HTML document>","warnings":[]}
+
+Rules:
+- Preserve the user's factual content and meaning.
+- Do not invent customers, prices, rankings, credentials, sources, or business claims.
+- Produce a complete standalone HTML document with inline CSS.
+- Do not include external scripts, remote fonts, analytics, tracking pixels, forms that submit externally, or network fetch calls.
+- Keep JavaScript out unless absolutely required for a static diagram interaction.
+- Use a clean, polished, readable visual style suitable for sharing AI-generated content.
+- Make it responsive for mobile and desktop.
+- For Mermaid input, render the diagram as readable code plus a polished visual container; do not require external Mermaid runtime.
+- For SVG input, preserve the SVG and frame it cleanly.
+- Avoid markdown fences around the JSON.
+
+Input type: ${codeType}
+Input content:
+${content}`;
+}
+
+function parseBeautifyResult(aiResult) {
+  const rawText = extractAiText(aiResult).trim();
+  if (!rawText) {
+    return { ok: false, error: '智能美化未返回内容。' };
+  }
+
+  const jsonText = stripMarkdownFence(rawText);
+  try {
+    const parsed = JSON.parse(jsonText);
+    if (!parsed || typeof parsed !== 'object') {
+      return { ok: false, error: '智能美化返回格式无效。' };
+    }
+    return { ok: true, value: parsed };
+  } catch (error) {
+    console.error('AI beautify JSON parse failed:', error, rawText.slice(0, 500));
+    return { ok: false, error: '智能美化返回格式无法解析。' };
+  }
+}
+
+function extractAiText(aiResult) {
+  if (typeof aiResult === 'string') return aiResult;
+  if (!aiResult || typeof aiResult !== 'object') return '';
+  if (typeof aiResult.response === 'object' && aiResult.response !== null) {
+    return JSON.stringify(aiResult.response);
+  }
+  if (typeof aiResult.response === 'string') return aiResult.response;
+  if (typeof aiResult.result === 'string') return aiResult.result;
+  if (typeof aiResult.text === 'string') return aiResult.text;
+  if (typeof aiResult.output_text === 'string') return aiResult.output_text;
+  if (Array.isArray(aiResult.choices)) {
+    return aiResult.choices.map((choice) => {
+      if (typeof choice?.message?.content === 'string') return choice.message.content;
+      if (Array.isArray(choice?.message?.content)) {
+        return choice.message.content.map((part) => String(part?.text || part || '')).join('');
+      }
+      if (typeof choice?.text === 'string') return choice.text;
+      if (typeof choice?.delta?.content === 'string') return choice.delta.content;
+      return '';
+    }).join('');
+  }
+  if (Array.isArray(aiResult.output)) {
+    return aiResult.output.map((item) => {
+      if (typeof item?.content === 'string') return item.content;
+      if (Array.isArray(item?.content)) {
+        return item.content.map((part) => String(part?.text || part?.content || part || '')).join('');
+      }
+      return '';
+    }).join('');
+  }
+  if (Array.isArray(aiResult.response)) {
+    return aiResult.response.map((part) => String(part?.text || part || '')).join('');
+  }
+  console.error('AI beautify returned no text fields:', Object.keys(aiResult));
+  return '';
+}
+
+function stripMarkdownFence(value) {
+  const trimmed = String(value || '').trim();
+  const fenceMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return fenceMatch ? fenceMatch[1].trim() : trimmed;
 }
 
 function assertBindings(env) {
@@ -707,6 +1125,12 @@ async function generatePageId(content, attempt) {
   return hash.slice(0, 7);
 }
 
+async function generateSubmissionId(pageId, createdAt) {
+  const randomToken = generateRandomToken(12);
+  const hash = await sha256Hex(`${pageId}:${createdAt}:${randomToken}`);
+  return `sub_${hash.slice(0, 18)}`;
+}
+
 async function sha256Hex(value) {
   const data = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest('SHA-256', data);
@@ -721,12 +1145,97 @@ function injectCodeTypeMeta(html, contentType) {
   return html;
 }
 
+function injectGoshareDataSdk(html, pageId) {
+  const script = `<script>
+(function() {
+  const pageId = ${JSON.stringify(pageId)};
+  async function submit(data, options) {
+    const kind = options && options.kind ? String(options.kind) : 'submission';
+    const response = await fetch('/api/pages/' + encodeURIComponent(pageId) + '/submissions', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind, data })
+    });
+    const result = await response.json().catch(() => ({ success: false, error: '提交失败' }));
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || '提交失败');
+    }
+    return result.submission;
+  }
+
+  window.goshare = Object.assign({}, window.goshare, { pageId, submit });
+
+  document.addEventListener('submit', async function(event) {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || !form.matches('[data-goshare-submit]')) return;
+    event.preventDefault();
+    const submitButton = form.querySelector('[type="submit"]');
+    const statusTarget = form.querySelector('[data-goshare-status]');
+    const originalButtonText = submitButton ? submitButton.textContent : '';
+    if (submitButton) submitButton.disabled = true;
+    if (statusTarget) statusTarget.textContent = '提交中...';
+
+    try {
+      const formData = new FormData(form);
+      const data = {};
+      for (const [key, value] of formData.entries()) {
+        if (Object.prototype.hasOwnProperty.call(data, key)) {
+          data[key] = Array.isArray(data[key]) ? data[key].concat(value) : [data[key], value];
+        } else {
+          data[key] = value;
+        }
+      }
+      await submit(data, { kind: form.getAttribute('data-goshare-kind') || 'form' });
+      if (statusTarget) statusTarget.textContent = '已提交';
+      form.reset();
+    } catch (error) {
+      if (statusTarget) statusTarget.textContent = error.message || '提交失败';
+    } finally {
+      if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.textContent = originalButtonText;
+      }
+    }
+  });
+})();
+</script>`;
+
+  if (html.includes('</body>')) {
+    return html.replace('</body>', `${script}\n</body>`);
+  }
+  return `${html}\n${script}`;
+}
+
 function isAuthEnabled(env) {
   return String(env.AUTH_ENABLED || 'false').toLowerCase() === 'true';
 }
 
 function getAuthPassword(env) {
-  return String(env.AUTH_PASSWORD || 'admin123');
+  return String(env.AUTH_PASSWORD || '');
+}
+
+function getMaxBeautifyContentLength(env) {
+  const parsedKb = Number.parseInt(String(env.MAX_BEAUTIFY_CONTENT_KB || ''), 10);
+  if (!Number.isFinite(parsedKb) || parsedKb <= 0) return DEFAULT_MAX_BEAUTIFY_CONTENT_LENGTH;
+  return Math.min(parsedKb, 512) * 1024;
+}
+
+async function canSubmitToPage(request, env, page) {
+  if (page.is_protected !== 1) return true;
+
+  const url = new URL(request.url);
+  const passwordFromQuery = url.searchParams.get('password');
+  const passwordFromCookie = getCookie(request, getPagePasswordCookieName(env, page.id));
+  const password = passwordFromQuery || passwordFromCookie;
+  return Boolean(password && password === page.password);
+}
+
+async function getSubmitterKey(request, env) {
+  const ip = request.headers.get('CF-Connecting-IP') || '';
+  const userAgent = request.headers.get('User-Agent') || '';
+  const acceptLanguage = request.headers.get('Accept-Language') || '';
+  return sha256Hex(`${getCookiePrefix(env)}:${ip}:${userAgent}:${acceptLanguage}`);
 }
 
 function getCookie(request, name) {
@@ -747,7 +1256,7 @@ function getCookie(request, name) {
 async function isAuthenticated(request, env) {
   if (!isAuthEnabled(env)) return true;
 
-  const cookie = getCookie(request, AUTH_COOKIE);
+  const cookie = getCookie(request, getAuthCookieName(env));
   if (!cookie) return false;
 
   const [payload, signature] = cookie.split('.');
@@ -767,12 +1276,12 @@ async function isAuthenticated(request, env) {
 }
 
 async function getOwnerContext(request, env) {
-  let ownerToken = getCookie(request, OWNER_COOKIE);
+  let ownerToken = getCookie(request, getOwnerCookieName(env));
   let cookieHeader = null;
 
   if (!ownerToken || !/^[a-zA-Z0-9_-]{32,160}$/.test(ownerToken)) {
     ownerToken = generateRandomToken();
-    cookieHeader = buildOwnerCookie(request, ownerToken);
+    cookieHeader = buildOwnerCookie(request, env, ownerToken);
   }
 
   return {
@@ -782,9 +1291,9 @@ async function getOwnerContext(request, env) {
   };
 }
 
-function buildOwnerCookie(request, ownerToken) {
+function buildOwnerCookie(request, env, ownerToken) {
   const secure = new URL(request.url).protocol === 'https:' ? '; Secure' : '';
-  return `${OWNER_COOKIE}=${ownerToken}; Max-Age=${OWNER_TTL_SECONDS}; Path=/; HttpOnly; SameSite=Lax${secure}`;
+  return `${getOwnerCookieName(env)}=${ownerToken}; Max-Age=${OWNER_TTL_SECONDS}; Path=/; HttpOnly; SameSite=Lax${secure}`;
 }
 
 function generateRandomToken(byteLength = 32) {
@@ -797,11 +1306,28 @@ async function createAuthCookie(request, env) {
   const payload = base64UrlEncode(`auth:${Date.now()}`);
   const signature = await sign(payload, env);
   const secure = new URL(request.url).protocol === 'https:' ? '; Secure' : '';
-  return `${AUTH_COOKIE}=${payload}.${signature}; Max-Age=${AUTH_TTL_SECONDS}; Path=/; HttpOnly; SameSite=Lax${secure}`;
+  return `${getAuthCookieName(env)}=${payload}.${signature}; Max-Age=${AUTH_TTL_SECONDS}; Path=/; HttpOnly; SameSite=Lax${secure}`;
 }
 
-function clearAuthCookie() {
-  return `${AUTH_COOKIE}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax`;
+function clearAuthCookie(env) {
+  return `${getAuthCookieName(env)}=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax`;
+}
+
+function getCookiePrefix(env) {
+  const prefix = String(env.COOKIE_PREFIX || DEFAULT_COOKIE_PREFIX).trim() || DEFAULT_COOKIE_PREFIX;
+  return prefix.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 32) || DEFAULT_COOKIE_PREFIX;
+}
+
+function getAuthCookieName(env) {
+  return `${getCookiePrefix(env)}_auth`;
+}
+
+function getOwnerCookieName(env) {
+  return `${getCookiePrefix(env)}_owner`;
+}
+
+function getPagePasswordCookieName(env, id) {
+  return `${getCookiePrefix(env)}_pw_${id}`;
 }
 
 async function sign(value, env) {

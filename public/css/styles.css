@@ -90,8 +90,8 @@ body {
   font-family: 'Noto Sans SC', sans-serif;
   background-color: var(--dark);
   color: var(--text-primary);
-  height: 100vh;
-  overflow: hidden; /* 防止滚动条出现 */
+  min-height: 100vh;
+  overflow-x: hidden;
   line-height: 1.5;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -282,17 +282,18 @@ body {
   padding: 1rem;
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  justify-content: space-between;
-  overflow: hidden;
+  min-height: 100vh;
+  justify-content: flex-start;
+  gap: 1rem;
+  overflow: visible;
 }
 
 /* 添加中间内容区域样式 */
 .content-area {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  flex: 0 auto;
+  justify-content: flex-start;
+  flex: 1 0 auto;
 }
 
 /* 自定义滚动条样式 */
@@ -441,7 +442,7 @@ body {
 }
 
 .title-container::before {
-  content: "HTML-GO";
+  content: var(--app-title-ghost, "goshare");
   position: absolute;
   top: 0;
   left: 0;
@@ -688,12 +689,52 @@ body {
 }
 
 /* 确保按钮区域在覆盖层上方 */
-.input-card .mt-4 {
+.input-card .mt-4,
+.input-actions {
   position: relative;
   z-index: 6;
   background: var(--bg-card);
   padding-top: 10px;
   margin-top: 0 !important;
+}
+
+.input-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.input-actions-left,
+.input-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.markdown-theme-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.markdown-theme-select {
+  min-width: 128px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  padding: 0.62rem 0.75rem;
+  font: inherit;
+}
+
+.markdown-theme-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 /* 防止输入框下方出现重复文本 - 更精确的解决方案 */
@@ -884,6 +925,17 @@ body {
   border-color: var(--primary);
 }
 
+.cyber-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+  box-shadow: none;
+}
+
+.cyber-btn:disabled::before {
+  display: none;
+}
+
 /* 按钮内图标和文字的间距 */
 #clear-button i, #generate-button i, label[for="html-file"] i {
   margin-right: 8px;
@@ -970,6 +1022,46 @@ label[for="html-file"] {
 
 .preview-btn {
   background: linear-gradient(90deg, var(--secondary), var(--secondary));
+}
+
+.preview-card {
+  gap: 1rem;
+}
+
+.preview-card[hidden] {
+  display: none;
+}
+
+.preview-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.preview-card-header .section-title {
+  margin-bottom: 0.35rem;
+}
+
+.preview-status {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.preview-card-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex: none;
+}
+
+.render-preview-frame {
+  width: 100%;
+  min-height: 520px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: #fff;
+  display: block;
 }
 
 .result-note {
@@ -1148,6 +1240,41 @@ label[for="html-file"] {
 
   .main-container {
     padding: 1rem 0.5rem;
+  }
+
+  .input-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .input-actions-left,
+  .input-actions-right {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .input-actions-left {
+    grid-template-columns: 1fr;
+  }
+
+  .markdown-theme-control {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .markdown-theme-select {
+    flex: 1;
+  }
+
+  .input-actions .cyber-btn {
+    min-height: 44px;
+    padding: 0.65rem 0.8rem;
+    width: 100%;
+  }
+
+  .render-preview-frame {
+    min-height: 460px;
   }
 
   .cyber-tabs {
@@ -2404,4 +2531,3 @@ label[for="html-file"] {
   font-family: 'Fira Code', monospace;
   font-size: 0.8rem;
 }
-

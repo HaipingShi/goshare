@@ -1,3 +1,14 @@
 AUTH_ENABLED=false
-AUTH_PASSWORD=admin123
-COOKIE_SECRET=replace-with-a-random-string
+AUTH_PASSWORD=replace-with-a-local-password
+COOKIE_SECRET=replace-with-openssl-rand-hex-32
+COOKIE_PREFIX=goshare
+
+APP_NAME=goshare
+APP_DESCRIPTION=分享 AI 生成内容的最佳方式
+APP_LOGO_URL=/icon/web/icon-512.png
+APP_REPO_URL=https://github.com/HaipingShi/goshare
+PUBLIC_SITE_URL=http://127.0.0.1:8787
+
+AI_ENABLED=true
+AI_BEAUTIFY_MODEL=@cf/zai-org/glm-4.7-flash
+MAX_BEAUTIFY_CONTENT_KB=120

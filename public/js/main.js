@@ -1,4 +1,4 @@
-// HTML-GO 主要JavaScript文件
+// goshare 主要JavaScript文件
 // 处理所有用户交互和功能
 
 // 错误提示功能
@@ -75,7 +75,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const codeInputContainer = document.getElementById('code-input-container');
   const fileName = document.getElementById('file-name');
   const clearButton = document.getElementById('clear-button');
+  const previewRenderButton = document.getElementById('preview-render-button');
+  const beautifyButton = document.getElementById('beautify-button');
   const generateButton = document.getElementById('generate-button');
+  const previewRefreshButton = document.getElementById('preview-refresh-button');
+  const previewSection = document.getElementById('preview-section');
+  const previewStatus = document.getElementById('preview-status');
+  const renderPreviewFrame = document.getElementById('render-preview-frame');
+  const markdownThemeSelect = document.getElementById('markdown-theme-select');
   const resultSection = document.getElementById('result-section');
   const resultUrl = document.getElementById('result-url');
   const copyButton = document.getElementById('copy-button');
@@ -92,6 +99,10 @@ document.addEventListener('DOMContentLoaded', () => {
   let highlightEnabled = true;
   let uploadedZipContent = null;
   let uploadedCodeTypeOverride = null;
+  let previewReady = false;
+  let previewContent = '';
+  let previewCodeType = '';
+  let previewMarkdownTheme = '';
   
   // 初始化代码编辑器 - 简化版本，不使用双层结构
   function initCodeEditor() {
@@ -138,6 +149,166 @@ document.addEventListener('DOMContentLoaded', () => {
       loadingIndicator.style.display = 'none';
     }
   }
+
+  function setActionLoading(button, label) {
+    if (!button) return;
+    button.dataset.originalHtml = button.dataset.originalHtml || button.innerHTML;
+    button.innerHTML = `<i class="fas fa-spinner fa-spin loading-spinner"></i> ${label}`;
+    button.disabled = true;
+  }
+
+  function restoreActionButton(button) {
+    if (!button) return;
+    if (button.dataset.originalHtml) {
+      button.innerHTML = button.dataset.originalHtml;
+      delete button.dataset.originalHtml;
+    }
+    button.disabled = false;
+  }
+
+  function getCurrentCodeType(content) {
+    return uploadedZipContent ? 'zip' : (uploadedCodeTypeOverride || detectCodeType(content));
+  }
+
+  function isMarkdownType(codeType) {
+    return codeType === 'markdown';
+  }
+
+  function getMarkdownTheme() {
+    return markdownThemeSelect ? markdownThemeSelect.value : 'bytedance';
+  }
+
+  function syncMarkdownThemeControl(codeType) {
+    if (!markdownThemeSelect) return;
+    const enabled = isMarkdownType(codeType) && !uploadedZipContent;
+    markdownThemeSelect.disabled = !enabled;
+  }
+
+  function collectTextPayload() {
+    if (!htmlInput) {
+      return { ok: false, error: 'HTML输入元素不存在' };
+    }
+
+    const htmlContent = htmlInput.value.trim();
+    if (!htmlContent) {
+      return { ok: false, error: '请输入 HTML/Markdown/SVG/Mermaid 内容' };
+    }
+
+    const codeType = getCurrentCodeType(htmlContent);
+    return {
+      ok: true,
+      htmlContent,
+      codeType,
+      markdownTheme: getMarkdownTheme(),
+    };
+  }
+
+  function invalidatePreview() {
+    previewReady = false;
+    previewContent = '';
+    previewCodeType = '';
+    previewMarkdownTheme = '';
+    if (generateButton) generateButton.disabled = true;
+    if (beautifyButton) beautifyButton.disabled = !htmlInput || !htmlInput.value.trim() || Boolean(uploadedZipContent);
+    if (previewStatus) previewStatus.textContent = '预览已失效';
+    if (resultSection) {
+      resultSection.style.display = 'none';
+      resultSection.classList.remove('fade-in');
+    }
+  }
+
+  function showPreview(html, codeType, statusText = '预览已生成', markdownTheme = getMarkdownTheme()) {
+    if (previewSection) previewSection.hidden = false;
+    if (renderPreviewFrame) renderPreviewFrame.srcdoc = html;
+    if (previewStatus) previewStatus.textContent = statusText;
+    previewReady = true;
+    previewContent = htmlInput ? htmlInput.value.trim() : '';
+    previewCodeType = codeType;
+    previewMarkdownTheme = markdownTheme;
+    if (generateButton) generateButton.disabled = false;
+    if (beautifyButton) beautifyButton.disabled = Boolean(uploadedZipContent);
+  }
+
+  async function renderPreview() {
+    syncToTextarea();
+
+    if (uploadedZipContent) {
+      showErrorToast('ZIP 静态网站请直接生成链接后预览');
+      if (generateButton) generateButton.disabled = false;
+      return;
+    }
+
+    const payload = collectTextPayload();
+    if (!payload.ok) {
+      showErrorToast(payload.error);
+      return;
+    }
+
+    setActionLoading(previewRenderButton, '预览中...');
+    if (previewRefreshButton) previewRefreshButton.disabled = true;
+
+    try {
+      const response = await fetch('/api/pages/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          htmlContent: payload.htmlContent,
+          codeType: payload.codeType,
+          markdownTheme: payload.markdownTheme,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || '预览失败');
+
+      showPreview(data.html, data.codeType || payload.codeType, undefined, data.markdownTheme || payload.markdownTheme);
+    } catch (error) {
+      showErrorToast(error.message || '预览失败');
+    } finally {
+      restoreActionButton(previewRenderButton);
+      if (previewRefreshButton) previewRefreshButton.disabled = false;
+    }
+  }
+
+  async function beautifyContent() {
+    const payload = collectTextPayload();
+    if (!payload.ok) {
+      showErrorToast(payload.error);
+      return;
+    }
+
+    if (payload.codeType === 'zip') {
+      showErrorToast('ZIP 静态网站暂不支持智能美化');
+      return;
+    }
+
+    setActionLoading(beautifyButton, '美化中...');
+    if (previewRenderButton) previewRenderButton.disabled = true;
+
+    try {
+      const response = await fetch('/api/pages/beautify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          htmlContent: payload.htmlContent,
+          codeType: payload.codeType,
+          markdownTheme: payload.markdownTheme,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || '智能美化失败');
+
+      htmlInput.value = data.htmlContent;
+      uploadedCodeTypeOverride = data.codeType || 'html';
+      updateCodeTypeIndicator(uploadedCodeTypeOverride, htmlInput.value);
+      showSuccessToast('智能美化完成');
+      await renderPreview();
+    } catch (error) {
+      showErrorToast(error.message || '智能美化失败');
+    } finally {
+      restoreActionButton(beautifyButton);
+      if (previewRenderButton) previewRenderButton.disabled = false;
+    }
+  }
   
   // 同步内容 - 简化版本，只更新代码类型指示器
   function syncToTextarea() {
@@ -145,6 +316,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // 如果有强制覆盖的代码类型则使用它，否则调用检测函数
       const codeType = uploadedCodeTypeOverride || detectCodeType(htmlInput.value);
       updateCodeTypeIndicator(codeType, htmlInput.value);
+      syncMarkdownThemeControl(codeType);
     }
   }
   
@@ -203,6 +375,9 @@ document.addEventListener('DOMContentLoaded', () => {
           htmlInput.value = `[ZIP 静态网页: ${file.name}] (${(file.size / 1024).toFixed(1)} KB)\n此内容暂不支持在线编辑。点击“生成链接”即可发布此静态网站。`;
           htmlInput.disabled = true;
           updateCodeTypeIndicator('zip', htmlInput.value);
+          syncMarkdownThemeControl('zip');
+          invalidatePreview();
+          if (generateButton) generateButton.disabled = false;
           hideLoading();
         };
         reader.readAsDataURL(file);
@@ -227,6 +402,7 @@ document.addEventListener('DOMContentLoaded', () => {
           htmlInput.value = content;
           htmlInput.selectionStart = htmlInput.selectionEnd = content.length;
           syncToTextarea();
+          invalidatePreview();
           hideLoading();
         };
         reader.readAsText(file);
@@ -251,6 +427,9 @@ document.addEventListener('DOMContentLoaded', () => {
         resultSection.style.display = 'none';
         resultSection.classList.remove('fade-in');
       }
+      if (previewSection) previewSection.hidden = true;
+      if (renderPreviewFrame) renderPreviewFrame.srcdoc = '';
+      invalidatePreview();
       // 同步到高亮区域
       syncToTextarea();
       // 显示成功提示
@@ -526,6 +705,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // 更新文本
     codeTypeText.textContent = label;
+    syncMarkdownThemeControl(codeType);
   }
 
   // 初始化代码编辑器
@@ -542,6 +722,7 @@ document.addEventListener('DOMContentLoaded', () => {
       
       // 同步到高亮区域
       syncToTextarea();
+      invalidatePreview();
     });
     
     // 页面加载时检测初始内容
@@ -588,6 +769,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  if (previewRenderButton) {
+    previewRenderButton.addEventListener('click', renderPreview);
+  }
+
+  if (previewRefreshButton) {
+    previewRefreshButton.addEventListener('click', renderPreview);
+  }
+
+  if (beautifyButton) {
+    beautifyButton.addEventListener('click', beautifyContent);
+  }
+
+  if (markdownThemeSelect) {
+    markdownThemeSelect.addEventListener('change', invalidatePreview);
+  }
+
   // 生成链接
   if (generateButton) {
     generateButton.addEventListener('click', async () => {
@@ -599,14 +796,22 @@ document.addEventListener('DOMContentLoaded', () => {
         showErrorToast('HTML输入元素不存在');
         return;
       }
-      
+
       const htmlContent = htmlInput.value.trim();
-      
+
       if (!htmlContent && !uploadedZipContent) {
         showErrorToast('请输入 HTML 内容或选择上传 ZIP 文件');
         return;
       }
-      
+
+      const currentCodeType = getCurrentCodeType(htmlContent);
+      const currentMarkdownTheme = getMarkdownTheme();
+      const themeChanged = isMarkdownType(currentCodeType) && previewMarkdownTheme !== currentMarkdownTheme;
+      if (!uploadedZipContent && (!previewReady || previewContent !== htmlContent || previewCodeType !== currentCodeType || themeChanged)) {
+        showErrorToast('请先预览当前内容，再确认生成链接');
+        return;
+      }
+
       try {
         // 显示加载指示器
         loadingIndicator.classList.add('show');
@@ -619,12 +824,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const isProtected = passwordToggle ? passwordToggle.checked : false;
         
         // 检测代码类型
-        const codeType = uploadedZipContent ? 'zip' : (uploadedCodeTypeOverride || detectCodeType(htmlContent));
+        const codeType = currentCodeType;
         console.log('检测到的代码类型:', codeType);
         
         const bodyPayload = uploadedZipContent
           ? { zipContent: uploadedZipContent, isProtected, codeType }
-          : { htmlContent, isProtected, codeType };
+          : { htmlContent, isProtected, codeType, markdownTheme: currentMarkdownTheme };
         
         // 调用 API 生成链接
         const response = await fetch('/api/pages/create', {
@@ -707,7 +912,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         // 恢复按钮状态
-        generateButton.innerHTML = '<i class="fas fa-link mr-1"></i>生成链接';
+        generateButton.innerHTML = '<i class="fas fa-link mr-1"></i>确认生成';
         generateButton.disabled = false;
         
         // 隐藏加载指示器
@@ -724,7 +929,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         // 恢复按钮状态
-        generateButton.innerHTML = '<i class="fas fa-link mr-1"></i>生成链接';
+        generateButton.innerHTML = '<i class="fas fa-link mr-1"></i>确认生成';
         generateButton.disabled = false;
         
         // 隐藏加载指示器

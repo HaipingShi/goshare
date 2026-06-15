@@ -1,4 +1,7 @@
-const APP_NAME = 'HTML-GO';
+const DEFAULT_APP_NAME = 'goshare';
+const DEFAULT_APP_DESCRIPTION = '分享 AI 生成内容的最佳方式';
+const DEFAULT_REPO_URL = 'https://github.com/HaipingShi/goshare';
+const DEFAULT_APP_LOGO_URL = '/icon/web/icon-512.png';
 
 export function escapeHtml(value = '') {
   return String(value)
@@ -9,27 +12,65 @@ export function escapeHtml(value = '') {
     .replace(/'/g, '&#039;');
 }
 
-function appTitleSpans() {
-  return APP_NAME.split('').map((char) => `<span>${escapeHtml(char)}</span>`).join('');
+function getAppConfig(env = {}) {
+  const appName = String(env.APP_NAME || DEFAULT_APP_NAME).trim() || DEFAULT_APP_NAME;
+  const appDescription = String(env.APP_DESCRIPTION || DEFAULT_APP_DESCRIPTION).trim() || DEFAULT_APP_DESCRIPTION;
+  const footerText = String(env.APP_FOOTER_TEXT || '').trim();
+  const footerUrl = String(env.APP_FOOTER_URL || '').trim();
+  const repoUrl = String(env.APP_REPO_URL || DEFAULT_REPO_URL).trim() || DEFAULT_REPO_URL;
+  const publicSiteUrl = String(env.PUBLIC_SITE_URL || '').trim();
+  const logoUrl = String(env.APP_LOGO_URL || DEFAULT_APP_LOGO_URL).trim() || DEFAULT_APP_LOGO_URL;
+
+  return {
+    appName,
+    appDescription,
+    footerText,
+    footerUrl,
+    repoUrl,
+    publicSiteUrl,
+    logoUrl,
+  };
 }
 
-function head({ title, extraHead = '' }) {
+function buildDeployButtonUrl(repoUrl) {
+  return `https://deploy.workers.cloudflare.com/?url=${encodeURIComponent(repoUrl)}`;
+}
+
+function safeScriptString(value) {
+  return JSON.stringify(String(value || ''))
+    .replace(/</g, '\\u003C')
+    .replace(/>/g, '\\u003E')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
+function cssString(value) {
+  return String(value || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+function appTitleSpans(appName) {
+  return appName.split('').map((char) => `<span>${escapeHtml(char)}</span>`).join('');
+}
+
+function head({ title, extraHead = '', env } = {}) {
+  const config = getAppConfig(env);
   return `
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${escapeHtml(title)}</title>
     <link rel="icon" href="/icon/web/favicon.ico" sizes="any">
-    <link rel="apple-touch-icon" href="/icon/web/apple-touch-icon.png">
+    <link rel="apple-touch-icon" href="${escapeHtml(config.logoUrl)}">
     <link rel="icon" type="image/png" sizes="192x192" href="/icon/web/icon-192.png">
-    <link rel="icon" type="image/png" sizes="512x512" href="/icon/web/icon-512.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="${escapeHtml(config.logoUrl)}">
     <meta name="theme-color" content="#6366f1">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="${APP_NAME}">
-    <meta property="og:title" content="${APP_NAME} | 分享AI生成内容的最佳方式">
+    <meta name="apple-mobile-web-app-title" content="${escapeHtml(config.appName)}">
+    <meta property="og:title" content="${escapeHtml(config.appName)} | ${escapeHtml(config.appDescription)}">
     <meta property="og:description" content="一个简单、高效的HTML代码分享平台">
     <meta property="og:type" content="website">
-    <meta property="og:image" content="/icon/web/icon-512.png">
+    <meta property="og:image" content="${escapeHtml(config.logoUrl)}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <link rel="stylesheet" href="/css/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/atom-one-dark.min.css">
@@ -45,7 +86,7 @@ function chromeStart(title, options = {}) {
   return `<!DOCTYPE html>
 <html ${htmlAttrs}>
 <head>
-  ${head({ title, extraHead: options.extraHead })}
+  ${head({ title, extraHead: options.extraHead, env: options.env })}
 </head>
 <body>
   <div class="app-container">
@@ -107,27 +148,36 @@ function chromeEnd({ includeMain = true, includeAdminLink = false, includeAdmin 
 </html>`;
 }
 
-function appHeader() {
+function appHeader(env) {
+  const config = getAppConfig(env);
   return `
     <header class="app-header">
-      <div class="title-container">
-        <h1 class="cyber-title">${appTitleSpans()}</h1>
+      <div class="title-container" style="--app-title-ghost: '${escapeHtml(cssString(config.appName))}';">
+        <h1 class="cyber-title">${appTitleSpans(config.appName)}</h1>
       </div>
-      <p class="app-description">分享AI生成内容的最佳方式</p>
+      <p class="app-description">${escapeHtml(config.appDescription)}</p>
     </header>`;
 }
 
-function appFooter() {
+function appFooter(env) {
+  const config = getAppConfig(env);
+  const defaultText = `@2026 ${config.appName}`;
+  const text = config.footerText || defaultText;
+  const footerContent = config.footerUrl
+    ? `<a href="${escapeHtml(config.footerUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(text)}</a>`
+    : escapeHtml(text);
+
   return `
     <footer class="app-footer">
-      <p class="footer-text">@2025 <a href="https://x.com/vista8" target="_blank" rel="noopener noreferrer">向阳乔木</a></p>
+      <p class="footer-text">${footerContent}</p>
     </footer>`;
 }
 
-export function renderIndexPage() {
-  return `${chromeStart(`${APP_NAME} | 分享 HTML 代码的简单方式`)}
+export function renderIndexPage(env) {
+  const config = getAppConfig(env);
+  return `${chromeStart(`${config.appName} | 分享 HTML 代码的简单方式`, { env })}
 <div class="main-container">
-  ${appHeader()}
+  ${appHeader(env)}
   <div class="content-area">
     <div class="card input-card">
       <div class="input-section">
@@ -146,22 +196,50 @@ export function renderIndexPage() {
           <input id="html-file" type="file" class="hidden" accept=".html,.htm,.md,.markdown,.svg,.txt,.zip" aria-label="上传文件" />
           <p id="file-name" class="mt-3" style="color: var(--primary);"></p>
         </div>
-        <div class="mt-4 flex justify-between" style="display: flex; justify-content: space-between; margin-top: 1rem;">
-          <div>
+        <div class="input-actions">
+          <div class="input-actions-left">
             <label for="html-file" class="cyber-btn cyber-btn-secondary tooltip micro-interaction" data-tooltip="上传 HTML/ZIP/Markdown/SVG 文件" aria-label="上传文件">
               <i class="fas fa-file-upload mr-1" aria-hidden="true"></i>上传文件
             </label>
+            <label class="markdown-theme-control" for="markdown-theme-select">
+              <span>Markdown 模板</span>
+              <select id="markdown-theme-select" class="markdown-theme-select" disabled>
+                <option value="bytedance">字节风格</option>
+                <option value="github">GitHub</option>
+                <option value="docs">技术文档</option>
+              </select>
+            </label>
           </div>
-          <div style="display: flex; gap: 12px;">
+          <div class="input-actions-right">
             <button id="clear-button" class="cyber-btn cyber-btn-secondary tooltip micro-interaction" data-tooltip="清空内容" aria-label="清空内容">
               <i class="fas fa-eraser mr-1" aria-hidden="true"></i>清除
             </button>
-            <button id="generate-button" class="cyber-btn cyber-btn-primary tooltip micro-interaction" data-tooltip="生成分享链接" aria-label="生成分享链接">
-              <i class="fas fa-link mr-1" aria-hidden="true"></i>生成链接
+            <button id="preview-render-button" class="cyber-btn cyber-btn-primary tooltip micro-interaction" data-tooltip="先渲染预览" aria-label="渲染预览">
+              <i class="fas fa-eye mr-1" aria-hidden="true"></i>预览
+            </button>
+            <button id="beautify-button" class="cyber-btn cyber-btn-secondary tooltip micro-interaction" data-tooltip="调用 Cloudflare AI 美化" aria-label="智能美化" disabled>
+              <i class="fas fa-magic mr-1" aria-hidden="true"></i>智能美化
+            </button>
+            <button id="generate-button" class="cyber-btn cyber-btn-secondary tooltip micro-interaction" data-tooltip="确认后生成分享链接" aria-label="确认生成分享链接" disabled>
+              <i class="fas fa-link mr-1" aria-hidden="true"></i>确认生成
             </button>
           </div>
         </div>
       </div>
+    </div>
+    <div id="preview-section" class="card preview-card" hidden aria-live="polite">
+      <div class="preview-card-header">
+        <div>
+          <h3 class="section-title">渲染预览</h3>
+          <p id="preview-status" class="preview-status">未生成预览</p>
+        </div>
+        <div class="preview-card-actions">
+          <button id="preview-refresh-button" class="action-btn tooltip micro-interaction" data-tooltip="重新预览" aria-label="重新预览">
+            <i class="fas fa-sync-alt" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+      <iframe id="render-preview-frame" class="render-preview-frame" title="渲染预览" sandbox="allow-scripts"></iframe>
     </div>
     <div id="result-section" class="card result-card" style="display: none;" aria-live="polite">
       <h3 class="section-title" style="color: var(--primary); font-family: 'Orbitron', sans-serif; margin-bottom: 1rem;">链接已生成</h3>
@@ -213,12 +291,304 @@ export function renderIndexPage() {
       </div>
     </div>
   </div>
-  ${appFooter()}
+  ${appFooter(env)}
 </div>
 ${chromeEnd({ includeMain: true, includeAdminLink: true })}`;
 }
 
-export function renderAdminPage() {
+export function renderBootstrapPage(env) {
+  const config = getAppConfig(env);
+  const deployUrl = buildDeployButtonUrl(config.repoUrl);
+  const displaySiteUrl = config.publicSiteUrl || 'https://your-share-domain.example';
+  const extraHead = `
+    <style>
+      body {
+        min-height: 100vh;
+        overflow-x: hidden;
+      }
+      .bootstrap-shell {
+        width: min(1120px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 32px 0 48px;
+      }
+      .bootstrap-hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 220px;
+        gap: 28px;
+        align-items: center;
+        padding: 24px 0 18px;
+      }
+      .bootstrap-kicker {
+        color: var(--secondary);
+        font-family: 'Orbitron', sans-serif;
+        font-size: 0.78rem;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        margin-bottom: 10px;
+      }
+      .bootstrap-title {
+        font-family: 'Orbitron', sans-serif;
+        font-size: clamp(2rem, 5vw, 4.25rem);
+        line-height: 1;
+        color: var(--text-primary);
+        margin-bottom: 16px;
+      }
+      .bootstrap-lede {
+        max-width: 720px;
+        color: var(--text-secondary);
+        font-size: 1.05rem;
+        line-height: 1.8;
+      }
+      .bootstrap-icon {
+        width: 180px;
+        height: 180px;
+        justify-self: end;
+        border-radius: 28px;
+        box-shadow: 0 24px 70px rgba(99, 102, 241, 0.35);
+      }
+      .bootstrap-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 22px;
+      }
+      .bootstrap-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+        margin-top: 20px;
+      }
+      .bootstrap-card {
+        min-height: 100%;
+      }
+      .bootstrap-card h2,
+      .bootstrap-card h3 {
+        font-family: 'Orbitron', sans-serif;
+        font-size: 1rem;
+        color: var(--text-primary);
+        margin-bottom: 12px;
+      }
+      .bootstrap-card p,
+      .bootstrap-card li,
+      .bootstrap-card label {
+        color: var(--text-secondary);
+        line-height: 1.7;
+      }
+      .bootstrap-card ul,
+      .bootstrap-card ol {
+        padding-left: 20px;
+      }
+      .bootstrap-wide {
+        grid-column: span 2;
+      }
+      .bootstrap-form {
+        display: grid;
+        gap: 12px;
+      }
+      .bootstrap-field {
+        display: grid;
+        gap: 6px;
+      }
+      .bootstrap-field input {
+        width: 100%;
+        min-height: 42px;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 10px 12px;
+        background: var(--bg-input);
+        color: var(--text-primary);
+        font: inherit;
+      }
+      .bootstrap-checks {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+      .bootstrap-check {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .bootstrap-output {
+        width: 100%;
+        min-height: 170px;
+        resize: vertical;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 12px;
+        background: rgba(15, 23, 42, 0.92);
+        color: var(--text-primary);
+        font-family: 'Fira Code', monospace;
+        font-size: 0.86rem;
+        line-height: 1.6;
+      }
+      .bootstrap-code {
+        overflow: auto;
+        border: 1px solid var(--border-color);
+        border-radius: 8px;
+        padding: 14px;
+        background: rgba(15, 23, 42, 0.92);
+        color: var(--text-primary);
+        font-family: 'Fira Code', monospace;
+        font-size: 0.82rem;
+        line-height: 1.6;
+      }
+      @media (max-width: 860px) {
+        .bootstrap-hero,
+        .bootstrap-grid {
+          grid-template-columns: 1fr;
+        }
+        .bootstrap-wide {
+          grid-column: span 1;
+        }
+        .bootstrap-icon {
+          justify-self: start;
+          width: 96px;
+          height: 96px;
+          border-radius: 18px;
+        }
+        .bootstrap-checks {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>`;
+  const starterPrompt = `我想部署自己的 ${config.appName} 分享站，源码仓库是 ${config.repoUrl}，站点域名是 ${displaySiteUrl}。请一步一步引导我在 Cloudflare 上完成部署，包含 D1、R2、Workers AI、AUTH_PASSWORD、COOKIE_SECRET 和自定义域名配置。`;
+
+  return `${chromeStart(`${config.appName} | 自部署引导`, { htmlAttrs: 'lang="zh-CN" data-page="bootstrap-page"', extraHead, env })}
+<main class="bootstrap-shell">
+  <section class="bootstrap-hero">
+    <div>
+      <div class="bootstrap-kicker">Self-host your share station</div>
+      <h1 class="bootstrap-title">${escapeHtml(config.appName)}</h1>
+      <p class="bootstrap-lede">${escapeHtml(config.appName)} 可以把 AI 生成的 HTML、Markdown、SVG、Mermaid 和静态 ZIP 变成一个可分享链接。这个页面用于把项目、部署步骤和 AI 引导词打包成一个可直接分享的入口。</p>
+      <div class="bootstrap-actions">
+        <a class="cyber-btn cyber-btn-primary micro-interaction" href="${escapeHtml(deployUrl)}" target="_blank" rel="noopener noreferrer">
+          <i class="fas fa-cloud-upload-alt mr-1" aria-hidden="true"></i>Deploy to Cloudflare
+        </a>
+        <a class="cyber-btn cyber-btn-secondary micro-interaction" href="${escapeHtml(config.repoUrl)}" target="_blank" rel="noopener noreferrer">
+          <i class="fab fa-github mr-1" aria-hidden="true"></i>查看源码
+        </a>
+      </div>
+    </div>
+    <img id="bootstrap-logo-preview" class="bootstrap-icon" src="${escapeHtml(config.logoUrl)}" alt="${escapeHtml(config.appName)} icon">
+  </section>
+
+  <section class="bootstrap-grid">
+    <article class="card bootstrap-card">
+      <h2><i class="fas fa-layer-group" aria-hidden="true"></i> 项目组成</h2>
+      <ul>
+        <li>Worker API 负责渲染、创建分享页和 AI 美化。</li>
+        <li>R2 保存用户提交的原始内容或静态网站文件。</li>
+        <li>D1 保存短链、owner、密码状态和内容元数据。</li>
+        <li>Workers AI 提供预览后的一键美化能力。</li>
+      </ul>
+    </article>
+    <article class="card bootstrap-card">
+      <h2><i class="fas fa-sliders-h" aria-hidden="true"></i> 部署时配置</h2>
+      <ul>
+        <li><code>APP_NAME</code>：你的分享站名称。</li>
+        <li><code>APP_LOGO_URL</code>：你的 logo 图片 URL，建议使用 512x512 PNG。</li>
+        <li><code>AUTH_PASSWORD</code>：后台入口密码，必须用 Secret。</li>
+        <li><code>COOKIE_SECRET</code>：Cookie 签名密钥，必须用 Secret。</li>
+        <li><code>PUBLIC_SITE_URL</code>：绑定后的公开域名。</li>
+      </ul>
+    </article>
+    <article class="card bootstrap-card">
+      <h2><i class="fas fa-shield-alt" aria-hidden="true"></i> 开源安全</h2>
+      <ul>
+        <li>不要提交 <code>.env</code>、<code>.dev.vars</code> 或真实生产脚本。</li>
+        <li>不要把个人域名、真实数据库 ID 当成模板默认值。</li>
+        <li>公开仓库只保留可复制、可替换的示例配置。</li>
+      </ul>
+    </article>
+
+    <article class="card bootstrap-card bootstrap-wide">
+      <h2><i class="fas fa-terminal" aria-hidden="true"></i> 给 AI 的一句话</h2>
+      <form class="bootstrap-form" id="bootstrap-prompt-form">
+        <div class="bootstrap-field">
+          <label for="bootstrap-domain">我的域名</label>
+          <input id="bootstrap-domain" type="text" placeholder="share.example.com" value="${escapeHtml(config.publicSiteUrl.replace(/^https?:\/\//, ''))}">
+        </div>
+        <div class="bootstrap-field">
+          <label for="bootstrap-name">站点名称</label>
+          <input id="bootstrap-name" type="text" value="${escapeHtml(config.appName)}">
+        </div>
+        <div class="bootstrap-field">
+          <label for="bootstrap-logo">Logo 图片 URL</label>
+          <input id="bootstrap-logo" type="url" placeholder="https://example.com/logo.png" value="${escapeHtml(config.logoUrl.startsWith('/') ? '' : config.logoUrl)}">
+        </div>
+        <div class="bootstrap-checks">
+          <label class="bootstrap-check"><input id="bootstrap-ai" type="checkbox" checked> 启用 AI 美化</label>
+          <label class="bootstrap-check"><input id="bootstrap-auth" type="checkbox" checked> 开启后台密码</label>
+        </div>
+        <textarea id="bootstrap-prompt" class="bootstrap-output" readonly>${escapeHtml(starterPrompt)}</textarea>
+        <div class="bootstrap-actions">
+          <button id="bootstrap-copy" type="button" class="cyber-btn cyber-btn-primary micro-interaction">
+            <i class="fas fa-copy mr-1" aria-hidden="true"></i>复制这句话
+          </button>
+          <a class="cyber-btn cyber-btn-secondary micro-interaction" href="${escapeHtml(deployUrl)}" target="_blank" rel="noopener noreferrer">
+            <i class="fas fa-external-link-alt mr-1" aria-hidden="true"></i>打开部署页
+          </a>
+        </div>
+      </form>
+    </article>
+
+    <article class="card bootstrap-card">
+      <h2><i class="fas fa-list-check" aria-hidden="true"></i> 手动部署</h2>
+      <pre class="bootstrap-code">npm install
+npx wrangler d1 create goshare-db
+npx wrangler r2 bucket create goshare-content
+npx wrangler secret put AUTH_PASSWORD
+npx wrangler secret put COOKIE_SECRET
+npm run deploy</pre>
+    </article>
+  </section>
+</main>
+${appFooter(env)}
+<script>
+  (function() {
+    const repoUrl = ${safeScriptString(config.repoUrl)};
+    const promptInput = document.getElementById('bootstrap-prompt');
+    const domainInput = document.getElementById('bootstrap-domain');
+    const nameInput = document.getElementById('bootstrap-name');
+    const logoInput = document.getElementById('bootstrap-logo');
+    const logoPreview = document.getElementById('bootstrap-logo-preview');
+    const aiInput = document.getElementById('bootstrap-ai');
+    const authInput = document.getElementById('bootstrap-auth');
+    const copyButton = document.getElementById('bootstrap-copy');
+
+    function renderPrompt() {
+      const name = (nameInput.value || 'goshare').trim();
+      const domain = (domainInput.value || 'share.example.com').trim();
+      const logoUrl = (logoInput.value || '').trim();
+      const aiText = aiInput.checked ? '启用 Workers AI 美化功能' : '先不启用 AI 美化功能';
+      const authText = authInput.checked ? '开启后台访问密码' : '首页暂时不加后台密码';
+      const logoText = logoUrl ? '自定义 logo 地址是 ' + logoUrl + '，' : '';
+      promptInput.value = '我想部署自己的 ' + name + ' 分享站，源码仓库是 ' + repoUrl + '，站点域名是 ' + domain + '。' + logoText + '请一步一步引导我在 Cloudflare 上完成部署，包含 D1、R2、Workers AI、' + authText + '、' + aiText + '、APP_LOGO_URL、AUTH_PASSWORD、COOKIE_SECRET 和自定义域名配置。';
+      if (logoPreview && logoUrl) logoPreview.src = logoUrl;
+    }
+
+    [domainInput, nameInput, logoInput, aiInput, authInput].forEach((element) => {
+      element.addEventListener('input', renderPrompt);
+      element.addEventListener('change', renderPrompt);
+    });
+
+    copyButton.addEventListener('click', async () => {
+      await navigator.clipboard.writeText(promptInput.value);
+      copyButton.innerHTML = '<i class="fas fa-check mr-1" aria-hidden="true"></i>已复制';
+      setTimeout(() => {
+        copyButton.innerHTML = '<i class="fas fa-copy mr-1" aria-hidden="true"></i>复制这句话';
+      }, 1600);
+    });
+
+    renderPrompt();
+  })();
+</script>
+${chromeEnd({ includeMain: false })}`;
+}
+
+export function renderAdminPage(env) {
+  const config = getAppConfig(env);
   const extraHead = `
     <style>
       body {
@@ -346,6 +716,9 @@ export function renderAdminPage() {
         grid-template-columns: minmax(0, 1fr) 360px;
         gap: 16px;
       }
+      .admin-submissions-panel {
+        grid-column: 1 / -1;
+      }
       .admin-panel {
         min-width: 0;
         border: 1px solid var(--border-color);
@@ -396,6 +769,17 @@ export function renderAdminPage() {
       }
       .admin-table tr.selected {
         background: rgba(var(--primary-rgb), 0.16);
+      }
+      .admin-submissions-table {
+        min-width: 760px;
+      }
+      .admin-submission-payload {
+        max-width: 520px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-family: 'Fira Code', monospace;
+        font-size: 0.8rem;
+        color: var(--text-secondary);
       }
       .admin-id {
         font-family: 'Fira Code', monospace;
@@ -496,18 +880,21 @@ export function renderAdminPage() {
         .admin-grid {
           grid-template-columns: 1fr;
         }
+        .admin-submissions-panel {
+          grid-column: auto;
+        }
         .admin-topbar {
           flex-direction: column;
         }
       }
     </style>`;
 
-  return `${chromeStart(`${APP_NAME} | 内容管理`, { htmlAttrs: 'lang="zh-CN" data-page="admin-page"', extraHead })}
+  return `${chromeStart(`${config.appName} | 内容管理`, { htmlAttrs: 'lang="zh-CN" data-page="admin-page"', extraHead, env })}
 <div class="admin-shell">
   <aside class="admin-sidebar">
     <a class="admin-brand" href="/">
       <i class="fas fa-bolt"></i>
-      <span>${APP_NAME}</span>
+      <span>${escapeHtml(config.appName)}</span>
     </a>
     <nav class="admin-nav" aria-label="后台导航">
       <a class="active" href="/admin"><i class="fas fa-list"></i><span>内容管理</span></a>
@@ -570,6 +957,14 @@ export function renderAdminPage() {
               <option value="zip">ZIP (静态网页)</option>
             </select>
           </div>
+          <div class="admin-field">
+            <label class="admin-label" for="admin-markdown-theme">Markdown 模板</label>
+            <select id="admin-markdown-theme" class="admin-select" disabled>
+              <option value="bytedance">字节风格</option>
+              <option value="github">GitHub</option>
+              <option value="docs">技术文档</option>
+            </select>
+          </div>
           <label class="admin-inline admin-muted">
             <input id="admin-protected" type="checkbox" class="admin-checkbox" disabled>
             <span>启用访问密码</span>
@@ -591,17 +986,43 @@ export function renderAdminPage() {
           <p id="admin-password" class="admin-muted"></p>
         </form>
       </section>
+      <section class="admin-panel admin-submissions-panel" aria-label="提交数据">
+        <div class="admin-panel-header">
+          <h2 class="admin-panel-title">提交数据</h2>
+          <div class="admin-inline">
+            <span id="admin-submissions-count" class="admin-muted">未选择</span>
+            <button id="admin-submissions-refresh" class="admin-button" disabled>
+              <i class="fas fa-sync-alt"></i><span>刷新</span>
+            </button>
+          </div>
+        </div>
+        <div class="admin-table-wrap">
+          <table class="admin-table admin-submissions-table">
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>类型</th>
+                <th>数据</th>
+              </tr>
+            </thead>
+            <tbody id="admin-submissions-body">
+              <tr><td class="admin-empty" colspan="3">从左侧选择一条内容</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   </main>
 </div>
 ${chromeEnd({ includeMain: false, includeAdmin: true })}`;
 }
 
-export function renderLoginPage({ error = null } = {}) {
+export function renderLoginPage({ error = null } = {}, env) {
+  const config = getAppConfig(env);
   const extraHead = '<link rel="stylesheet" href="/css/login.css">';
-  return `${chromeStart(`${APP_NAME} | 登录`, { htmlAttrs: 'lang="zh-CN" data-page="login-page"', extraHead })}
+  return `${chromeStart(`${config.appName} | 登录`, { htmlAttrs: 'lang="zh-CN" data-page="login-page"', extraHead, env })}
 <div class="main-container">
-  ${appHeader()}
+  ${appHeader(env)}
   <div class="content-area">
     <div class="login-card">
       <h2 class="card-title"><i class="fas fa-lock" style="margin-right: 10px; color: var(--accent);"></i>请输入访问密码</h2>
@@ -635,12 +1056,13 @@ export function renderLoginPage({ error = null } = {}) {
       </script>
     </div>
   </div>
-  ${appFooter()}
+  ${appFooter(env)}
 </div>
 ${chromeEnd({ includeMain: false })}`;
 }
 
-export function renderPasswordPage({ id, error = null }) {
+export function renderPasswordPage({ id, error = null }, env) {
+  const config = getAppConfig(env);
   const safeId = escapeHtml(id);
   const extraHead = `
     <meta name="format-detection" content="telephone=no">
@@ -662,9 +1084,9 @@ export function renderPasswordPage({ id, error = null }) {
       }
     </style>`;
 
-  return `${chromeStart(`${APP_NAME} | 密码保护`, { htmlAttrs: 'lang="zh-CN" data-page="password-page"', extraHead })}
+  return `${chromeStart(`${config.appName} | 密码保护`, { htmlAttrs: 'lang="zh-CN" data-page="password-page"', extraHead, env })}
 <div class="main-container">
-  ${appHeader()}
+  ${appHeader(env)}
   <div class="code-input-area">
     <div class="centered-password-container">
       <div class="card password-card centered-password-card">
@@ -687,7 +1109,7 @@ export function renderPasswordPage({ id, error = null }) {
       </div>
     </div>
   </div>
-  ${appFooter()}
+  ${appFooter(env)}
 </div>
 <script>
   document.addEventListener('DOMContentLoaded', function() {
@@ -745,11 +1167,12 @@ export function renderPasswordPage({ id, error = null }) {
 ${chromeEnd({ includeMain: false })}`;
 }
 
-export function renderErrorPage({ title = '页面未找到', message = '您请求的页面不存在' }) {
-  return `${chromeStart(title)}
+export function renderErrorPage({ title = '页面未找到', message = '您请求的页面不存在' }, env) {
+  const config = getAppConfig(env);
+  return `${chromeStart(title, { env })}
 <div class="main-container">
   <header class="app-header">
-    <h1 class="app-title">${APP_NAME}</h1>
+    <h1 class="app-title">${escapeHtml(config.appName)}</h1>
   </header>
   <div class="card error-card">
     <div class="error-icon">
@@ -761,7 +1184,7 @@ export function renderErrorPage({ title = '页面未找到', message = '您请�
       <i class="fas fa-arrow-left"></i> 返回首页
     </a>
   </div>
-  ${appFooter()}
+  ${appFooter(env)}
 </div>
 ${chromeEnd({ includeMain: false })}`;
 }
