@@ -59,12 +59,13 @@
 
 请严格按 docs/AI_DEPLOY_WORKFLOW.md 的阶段推进：
 1. 先做账号、域名、部署方式和风险确认。
-2. 优先使用 README 中的 Deploy to Cloudflare 按钮部署；失败时再使用 Wrangler CLI 兜底。
-3. 设置生产 Secrets 和变量。
-4. 应用远端 D1 migrations。
-5. 部署 Worker 并记录所有资源。
-6. 做登录、创建、分享卡片、正文页、/bootstrap 和 Agent API 冒烟测试。
-7. 最后输出部署记录、未完成项、风险和下一步。
+2. 做部署前安全检查，并说明“安全扫描通过不等于无恶意认证”。
+3. 优先使用 README 中的 Deploy to Cloudflare 按钮部署；失败时再使用 Wrangler CLI 兜底。
+4. 设置生产 Secrets 和变量。
+5. 应用远端 D1 migrations。
+6. 部署 Worker 并记录所有资源。
+7. 做登录、创建、分享卡片、正文页、/bootstrap 和 Agent API 冒烟测试。
+8. 最后输出部署记录、安全检查结果、未完成项、风险和下一步。
 ```
 
 <p align="center">
