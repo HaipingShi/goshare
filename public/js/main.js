@@ -17,6 +17,13 @@ function showErrorToast(message) {
   }
 }
 
+function getApiErrorMessage(data, fallback) {
+  if (data?.message) return data.message;
+  if (typeof data?.error === 'string') return data.error;
+  if (data?.error?.message) return data.error.message;
+  return fallback;
+}
+
 // 成功提示功能
 function showSuccessToast(message) {
   const successToast = document.getElementById('success-toast');
@@ -130,17 +137,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderAgentApiPrompt() {
     if (!agentApiPrompt || !agentApiEndpoint) return;
-    const endpoint = `${window.location.origin}/api/pages/create`;
+    const origin = window.location.origin;
+    const endpoint = `${origin}/api/v1/pages/create`;
+    const quotaEndpoint = `${origin}/api/v1/quota`;
     agentApiEndpoint.textContent = endpoint;
-    agentApiPrompt.value = `你可以直接调用这个 goshare 公开 demo 的创建接口生成分享页，不需要打开网页 UI，也不需要 AGENT_API_TOKEN。
+    agentApiPrompt.value = `你正在使用一个公开的 goshare demo 站点。你可以帮我把内容创建成分享页，不需要打开网页 UI，也不需要 AGENT_API_TOKEN。
 
 接口：POST ${endpoint}
+额度预检：GET ${quotaEndpoint}
 
 安全要求：
 - 这是公开 demo 接口，只适合体验和临时分享。
 - 不要上传隐私、密钥、客户数据或不能公开的代码。
 - 创建内容会受到安全扫描和每日额度限制。
-- 请求失败时先读取 error、logs 和 quota，不要重复盲打请求。
+- 创建前先请求额度预检；请求失败时读取 error.code、error.message 和 quota，不要重复盲打。
+- 重试时使用相同 Idempotency-Key，避免超时后重复创建。
 
 请求 JSON 字段：
 - htmlContent：HTML、Markdown、SVG 或 Mermaid 文本。
@@ -149,9 +160,35 @@ document.addEventListener('DOMContentLoaded', () => {
 - title / summary：可选；不填时 goshare 会尝试生成或提取。
 - isProtected：可选；true 时返回临时访问密码。
 
+成功响应契约：
+{
+  "success": true,
+  "id": "abc123",
+  "url": "${origin}/share/abc123",
+  "cardUrl": "${origin}/share/abc123",
+  "viewUrl": "${origin}/view/abc123",
+  "quota": { "remaining": 9, "limit": 10, "resetAt": "2026-06-17T00:00:00.000Z" }
+}
+
+失败响应契约：
+{
+  "success": false,
+  "error": { "code": "QUOTA_EXCEEDED", "message": "今日创建次数已达上限", "retryable": false },
+  "quota": { "remaining": 0, "limit": 10, "resetAt": "2026-06-17T00:00:00.000Z" }
+}
+
+失败处理：
+- 400 INVALID_JSON / INVALID_REQUEST：修正 JSON 或字段后再发。
+- 409 IDEMPOTENCY_CONFLICT：同一个 Idempotency-Key 已用于不同内容，换 key 后再发。
+- 413 TOO_LARGE：压缩、截断或拆分内容。
+- 422 INVALID_CONTENT：内容未通过安全检测，不要原样重试。
+- 429 QUOTA_EXCEEDED：停止请求，告诉我 resetAt。
+- 429 RATE_LIMITED 或 5xx 且 retryable=true：退避后最多重试 1 次。
+
 curl 示例：
 curl -X POST "${endpoint}" \\
   -H "Content-Type: application/json" \\
+  -H "Idempotency-Key: $(uuidgen 2>/dev/null || date +%s)" \\
   -d '{
     "htmlContent": "# Hello goshare\\n\\nCreated directly from an AI agent.",
     "codeType": "markdown",
@@ -162,11 +199,11 @@ curl -X POST "${endpoint}" \\
   }'
 
 成功后：
-- 把响应里的 cardUrl 或 url 发给我用于转发。
+- 把响应里的 url 或 cardUrl 发给我用于转发。
 - 需要正文页时使用 viewUrl。
-- 如果返回 429，说明 demo 今日额度已用完，请稍后再试。
+- 记录 id，方便排查本次创建。
 
-如果你是站点拥有者或授权 agent，才使用需要 Bearer Token 的 /api/agent/pages。`;
+如果你是站点拥有者或授权 agent，才使用需要 Bearer Token 的 ${origin}/api/v1/agent/pages。`;
   }
   
   // 初始化代码编辑器 - 简化版本，不使用双层结构
@@ -323,7 +360,7 @@ curl -X POST "${endpoint}" \\
         }),
       });
       const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || '预览失败');
+      if (!response.ok || !data.success) throw new Error(getApiErrorMessage(data, '预览失败'));
 
       showPreview(data.html, data.codeType || payload.codeType, undefined, data.markdownTheme || payload.markdownTheme);
     } catch (error) {
@@ -360,7 +397,7 @@ curl -X POST "${endpoint}" \\
         }),
       });
       const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || '智能美化失败');
+      if (!response.ok || !data.success) throw new Error(getApiErrorMessage(data, '智能美化失败'));
 
       htmlInput.value = data.htmlContent;
       uploadedCodeTypeOverride = data.codeType || 'html';
@@ -927,7 +964,7 @@ curl -X POST "${endpoint}" \\
           : { htmlContent, isProtected, codeType, markdownTheme: currentMarkdownTheme };
         
         // 调用 API 生成链接
-        const response = await fetch('/api/pages/create', {
+        const response = await fetch('/api/v1/pages/create', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -1014,7 +1051,7 @@ curl -X POST "${endpoint}" \\
           
           // 不需要显示生成链接的toast提示
         } else {
-          throw new Error(data.error || '生成链接失败');
+          throw new Error(getApiErrorMessage(data, '生成链接失败'));
         }
         
         // 恢复按钮状态

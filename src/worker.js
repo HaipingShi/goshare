@@ -105,11 +105,15 @@ async function handleRequest(request, env) {
     });
   }
 
-  if (pathname === '/api/agent/pages' && request.method === 'POST') {
+  if ((pathname === '/api/agent/pages' || pathname === '/api/v1/agent/pages') && request.method === 'POST') {
     return createAgentPage(request, env);
   }
 
-  if (pathname === '/api/pages/create' && request.method === 'POST') {
+  if ((pathname === '/api/quota' || pathname === '/api/v1/quota') && request.method === 'GET') {
+    return getQuotaInfo(request, env);
+  }
+
+  if ((pathname === '/api/pages/create' || pathname === '/api/v1/pages/create') && request.method === 'POST') {
     if (!(await isAuthenticated(request, env))) return unauthorizedJson();
     return createPage(request, env);
   }
@@ -222,11 +226,36 @@ async function handleLogin(request, env) {
 async function createPage(request, env) {
   assertBindings(env);
   const owner = await getOwnerContext(request, env);
+  const submitterKey = await getSubmitterKey(request, env);
+  const quotaScope = `create:${submitterKey}`;
 
   const payload = await readJsonPayload(request);
   if (!payload.ok) return payload.response;
 
-  const quota = await enforceDailyLimit(env, `create:${await getSubmitterKey(request, env)}`, getDailyCreateLimit(env));
+  const idempotencyKey = getIdempotencyKey(request);
+  const contentHash = idempotencyKey ? await getPayloadContentHash(payload.data) : '';
+  if (idempotencyKey && contentHash) {
+    const idempotencyRecord = await getIdempotencyRecord(env, quotaScope, idempotencyKey);
+    if (idempotencyRecord && idempotencyRecord.request_hash !== contentHash) {
+      return apiErrorResponse({
+        code: 'IDEMPOTENCY_CONFLICT',
+        message: 'Idempotency-Key 已用于不同内容',
+        status: 409,
+        retryable: false,
+      });
+    }
+    const existingPage = idempotencyRecord ? await getPageRecord(env, idempotencyRecord.page_id) : null;
+    if (existingPage) {
+      const quotaState = await getDailyUsageState(env, quotaScope, getDailyCreateLimit(env));
+      return createPageSuccessResponse(request, env, existingPage, quotaState, {
+        status: 200,
+        headers: owner.cookieHeader ? { 'Set-Cookie': owner.cookieHeader } : {},
+        idempotent: true,
+      });
+    }
+  }
+
+  const quota = await enforceDailyLimit(env, quotaScope, getDailyCreateLimit(env));
   if (!quota.ok) {
     return dailyLimitResponse(quota, '今日创建次数已达上限');
   }
@@ -236,21 +265,14 @@ async function createPage(request, env) {
   });
   if (!result.ok) return createPageErrorResponse(result);
 
-  const cardUrl = buildShareCardUrl(request, env, result.page.urlId);
-  const viewUrl = buildViewUrl(request, env, result.page.urlId);
-  return jsonResponse({
-    success: true,
-    url: cardUrl,
-    cardUrl,
-    viewUrl,
-    urlId: result.page.urlId,
-    password: result.page.password,
-    isProtected: result.page.isProtected,
-    title: result.page.title,
-    summary: result.page.summary,
-    securityWarnings: result.page.securityWarnings,
-    quota: quotaSummary(quota),
-  }, 200, owner.cookieHeader ? { 'Set-Cookie': owner.cookieHeader } : {});
+  if (idempotencyKey && contentHash) {
+    await saveIdempotencyRecord(env, quotaScope, idempotencyKey, contentHash, result.page.urlId);
+  }
+
+  return createPageSuccessResponse(request, env, result.page, quota, {
+    status: 200,
+    headers: owner.cookieHeader ? { 'Set-Cookie': owner.cookieHeader } : {},
+  });
 }
 
 async function createAgentPage(request, env) {
@@ -273,7 +295,35 @@ async function createAgentPage(request, env) {
     }
     await appendAgentRunLog(env, runId, logs, 'info', 'create_payload_received');
 
-    const quota = await enforceDailyLimit(env, `agent-create:${auth.agentKey}`, getDailyAgentCreateLimit(env));
+    const quotaScope = `agent-create:${auth.agentKey}`;
+    const idempotencyKey = getIdempotencyKey(request);
+    const contentHash = idempotencyKey ? await getPayloadContentHash(payload.data) : '';
+    if (idempotencyKey && contentHash) {
+      const idempotencyRecord = await getIdempotencyRecord(env, quotaScope, idempotencyKey);
+      if (idempotencyRecord && idempotencyRecord.request_hash !== contentHash) {
+        return finishAgentRunWithFailure(env, runId, logs, 'Idempotency-Key 已用于不同内容', 409);
+      }
+      const existingPage = idempotencyRecord ? await getPageRecord(env, idempotencyRecord.page_id) : null;
+      if (existingPage) {
+        const quotaState = await getDailyUsageState(env, quotaScope, getDailyAgentCreateLimit(env));
+        await updateAgentRunStatus(env, runId, 'completed', existingPage.id, null);
+        await appendAgentRunLog(env, runId, logs, 'info', 'idempotent_page_reused', {
+          urlId: existingPage.id,
+          contentHash,
+        });
+        return createPageSuccessResponse(request, env, existingPage, quotaState, {
+          status: 200,
+          extra: {
+            runId,
+            status: 'completed',
+            logs,
+            idempotent: true,
+          },
+        });
+      }
+    }
+
+    const quota = await enforceDailyLimit(env, quotaScope, getDailyAgentCreateLimit(env));
     if (!quota.ok) {
       await appendAgentRunLog(env, runId, logs, 'error', 'daily_limit_exceeded', quotaSummary(quota));
       return finishAgentRunWithFailure(env, runId, logs, '今日 Agent 创建次数已达上限', 429);
@@ -302,10 +352,14 @@ async function createAgentPage(request, env) {
       quota: quotaSummary(quota),
     });
     await updateAgentRunStatus(env, runId, 'completed', result.page.urlId, null);
+    if (idempotencyKey && contentHash) {
+      await saveIdempotencyRecord(env, quotaScope, idempotencyKey, contentHash, result.page.urlId);
+    }
     await appendAgentRunLog(env, runId, logs, 'info', 'agent_run_completed');
 
     return jsonResponse({
       success: true,
+      id: result.page.urlId,
       url,
       cardUrl: url,
       viewUrl,
@@ -335,10 +389,83 @@ async function createAgentPage(request, env) {
       success: false,
       runId,
       status: 'failed',
-      error: 'Agent API 执行失败',
+      error: {
+        code: 'INTERNAL_ERROR',
+        message: 'Agent API 执行失败',
+        retryable: true,
+      },
+      message: 'Agent API 执行失败',
       logs,
     }, 500);
   }
+}
+
+async function getQuotaInfo(request, env) {
+  assertBindings(env);
+  const submitterKey = await getSubmitterKey(request, env);
+  const createQuota = await getDailyUsageState(env, `create:${submitterKey}`, getDailyCreateLimit(env));
+  const aiQuota = await getDailyUsageState(env, `ai:${submitterKey}`, getDailyAiLimit(env));
+  const result = {
+    success: true,
+    quotas: {
+      create: quotaSummary(createQuota),
+      ai: quotaSummary(aiQuota),
+    },
+  };
+
+  const authHeader = String(request.headers.get('Authorization') || '');
+  if (authHeader) {
+    const auth = await authenticateAgentRequest(request, env);
+    if (auth.ok) {
+      const agentQuota = await getDailyUsageState(env, `agent-create:${auth.agentKey}`, getDailyAgentCreateLimit(env));
+      result.quotas.agentCreate = quotaSummary(agentQuota);
+      result.agent = { authenticated: true };
+    } else {
+      result.agent = {
+        authenticated: false,
+        error: 'Bearer Token 无效或 Agent API 未配置',
+      };
+    }
+  }
+
+  return jsonResponse(result);
+}
+
+function getIdempotencyKey(request) {
+  const value = String(request.headers.get('Idempotency-Key') || '').trim();
+  return value ? value.slice(0, 160) : '';
+}
+
+async function getPayloadContentHash(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return '';
+  const requestedCodeType = String(payload.codeType || '').trim().toLowerCase();
+  if (requestedCodeType === CODE_TYPES.ZIP) {
+    const zipContent = String(payload.zipContent || '').trim();
+    return zipContent ? sha256Hex(zipContent) : '';
+  }
+  const htmlContent = String(payload.htmlContent ?? payload.content ?? '').trim();
+  return htmlContent ? sha256Hex(htmlContent) : '';
+}
+
+async function getIdempotencyRecord(env, scope, idempotencyKey) {
+  if (!scope || !idempotencyKey) return null;
+  return env.DB.prepare(`
+    SELECT scope, idempotency_key, request_hash, page_id, created_at
+    FROM idempotency_keys
+    WHERE scope = ? AND idempotency_key = ?
+  `)
+    .bind(scope, idempotencyKey)
+    .first();
+}
+
+async function saveIdempotencyRecord(env, scope, idempotencyKey, requestHash, pageId) {
+  if (!scope || !idempotencyKey || !requestHash || !pageId) return;
+  await env.DB.prepare(`
+    INSERT OR IGNORE INTO idempotency_keys (scope, idempotency_key, request_hash, page_id)
+    VALUES (?, ?, ?, ?)
+  `)
+    .bind(scope, idempotencyKey, requestHash, pageId)
+    .run();
 }
 
 async function createSharePageFromPayload(payload, env, options = {}) {
@@ -548,12 +675,86 @@ function createPageError(error, status, details = {}) {
   };
 }
 
+function createPageSuccessResponse(request, env, page, quota, options = {}) {
+  const id = page.urlId || page.id;
+  const cardUrl = buildShareCardUrl(request, env, id);
+  const viewUrl = buildViewUrl(request, env, id);
+  const isProtected = page.isProtected ?? page.is_protected === 1;
+  return jsonResponse({
+    success: true,
+    id,
+    url: cardUrl,
+    cardUrl,
+    viewUrl,
+    urlId: id,
+    password: page.password,
+    isProtected,
+    title: page.title,
+    summary: page.summary,
+    securityWarnings: page.securityWarnings || [],
+    quota: quotaSummary(quota),
+    idempotent: Boolean(options.idempotent || options.extra?.idempotent),
+    ...(options.extra || {}),
+  }, options.status || 200, options.headers || {});
+}
+
 function createPageErrorResponse(result) {
+  return apiErrorResponse({
+    code: inferCreateErrorCode(result),
+    message: result.error,
+    status: result.status || 500,
+    retryable: isRetryableStatus(result.status),
+    details: {
+      securityFindings: result.details?.findings || undefined,
+    },
+  });
+}
+
+function apiErrorResponse({ code, message, status = 500, retryable = false, quota, details = {}, headers = {} }) {
   return jsonResponse({
     success: false,
-    error: result.error,
-    securityFindings: result.details?.findings || undefined,
-  }, result.status || 500);
+    error: {
+      code,
+      message,
+      retryable,
+    },
+    message,
+    quota: quotaSummary(quota),
+    ...details,
+  }, status, headers);
+}
+
+function inferCreateErrorCode(result) {
+  const status = Number(result?.status || 500);
+  const message = String(result?.error || '');
+  if (status === 413) return 'TOO_LARGE';
+  if (status === 409) return 'IDEMPOTENCY_CONFLICT';
+  if (status === 422) return 'INVALID_CONTENT';
+  if (status === 429) return 'QUOTA_EXCEEDED';
+  if (status === 401) return 'UNAUTHORIZED';
+  if (status === 403) return 'FORBIDDEN';
+  if (status >= 500) return 'INTERNAL_ERROR';
+  if (/安全检测|钓鱼|凭据|ZIP|HTML|内容|index\.html|源码包|压缩/i.test(message)) {
+    return 'INVALID_CONTENT';
+  }
+  return 'INVALID_REQUEST';
+}
+
+function inferAgentErrorCode(statusCode, message) {
+  if (statusCode === 401) return 'UNAUTHORIZED';
+  if (statusCode === 409) return 'IDEMPOTENCY_CONFLICT';
+  if (statusCode === 413) return 'TOO_LARGE';
+  if (statusCode === 422) return 'INVALID_CONTENT';
+  if (statusCode === 429) return 'QUOTA_EXCEEDED';
+  if (statusCode === 503) return 'NOT_CONFIGURED';
+  if (statusCode >= 500) return 'INTERNAL_ERROR';
+  if (/token/i.test(String(message || ''))) return 'UNAUTHORIZED';
+  return 'INVALID_REQUEST';
+}
+
+function isRetryableStatus(status) {
+  const normalized = Number(status || 500);
+  return normalized === 408 || normalized === 409 || normalized === 425 || normalized === 429 || normalized >= 500;
 }
 
 async function finishAgentRunWithFailure(env, runId, logs, error, statusCode = 500, details = {}) {
@@ -567,7 +768,12 @@ async function finishAgentRunWithFailure(env, runId, logs, error, statusCode = 5
     success: false,
     runId,
     status: 'failed',
-    error,
+    error: {
+      code: inferAgentErrorCode(statusCode, error),
+      message: error,
+      retryable: statusCode === 429 ? false : isRetryableStatus(statusCode),
+    },
+    message: error,
     securityFindings: details.findings,
     logs,
   }, statusCode);
@@ -578,11 +784,12 @@ async function authenticateAgentRequest(request, env) {
   if (!expectedToken) {
     return {
       ok: false,
-      response: jsonResponse({
-        success: false,
-        status: 'not_configured',
-        error: 'Agent API 未配置 AGENT_API_TOKEN',
-      }, 503),
+      response: apiErrorResponse({
+        code: 'NOT_CONFIGURED',
+        message: 'Agent API 未配置 AGENT_API_TOKEN',
+        status: 503,
+        retryable: false,
+      }),
     };
   }
 
@@ -591,11 +798,13 @@ async function authenticateAgentRequest(request, env) {
   if (!match) {
     return {
       ok: false,
-      response: jsonResponse({
-        success: false,
-        status: 'unauthorized',
-        error: '请提供 Bearer Token',
-      }, 401, { 'WWW-Authenticate': 'Bearer realm="goshare-agent"' }),
+      response: apiErrorResponse({
+        code: 'UNAUTHORIZED',
+        message: '请提供 Bearer Token',
+        status: 401,
+        retryable: false,
+        headers: { 'WWW-Authenticate': 'Bearer realm="goshare-agent"' },
+      }),
     };
   }
 
@@ -605,11 +814,13 @@ async function authenticateAgentRequest(request, env) {
   if (!constantTimeEqual(providedHash, expectedHash)) {
     return {
       ok: false,
-      response: jsonResponse({
-        success: false,
-        status: 'unauthorized',
-        error: 'Bearer Token 无效',
-      }, 401, { 'WWW-Authenticate': 'Bearer realm="goshare-agent"' }),
+      response: apiErrorResponse({
+        code: 'UNAUTHORIZED',
+        message: 'Bearer Token 无效',
+        status: 401,
+        retryable: false,
+        headers: { 'WWW-Authenticate': 'Bearer realm="goshare-agent"' },
+      }),
     };
   }
 
@@ -1315,7 +1526,12 @@ async function readJsonPayload(request) {
   } catch {
     return {
       ok: false,
-      response: jsonResponse({ success: false, error: '请求格式错误' }, 400),
+      response: apiErrorResponse({
+        code: 'INVALID_JSON',
+        message: '请求格式错误',
+        status: 400,
+        retryable: false,
+      }),
     };
   }
 }
@@ -1579,23 +1795,60 @@ async function enforceDailyLimit(env, scope, limit) {
   };
 }
 
+async function getDailyUsageState(env, scope, limit) {
+  const normalizedLimit = Number(limit);
+  if (!Number.isFinite(normalizedLimit) || normalizedLimit <= 0) {
+    return {
+      ok: true,
+      unlimited: true,
+      limit: 0,
+      count: 0,
+      remaining: null,
+      day: new Date().toISOString().slice(0, 10),
+    };
+  }
+
+  const day = new Date().toISOString().slice(0, 10);
+  const existing = await env.DB.prepare('SELECT count FROM daily_usage WHERE scope = ? AND day = ?')
+    .bind(scope, day)
+    .first();
+  const count = Number(existing?.count || 0);
+  return {
+    ok: count < normalizedLimit,
+    limit: normalizedLimit,
+    count,
+    remaining: Math.max(0, normalizedLimit - count),
+    day,
+  };
+}
+
 function dailyLimitResponse(quota, message) {
-  return jsonResponse({
-    success: false,
-    error: message,
-    quota: quotaSummary(quota),
-  }, 429);
+  return apiErrorResponse({
+    code: 'QUOTA_EXCEEDED',
+    message,
+    status: 429,
+    retryable: false,
+    quota,
+  });
 }
 
 function quotaSummary(quota) {
   if (!quota) return undefined;
+  const day = quota.day || new Date().toISOString().slice(0, 10);
   return {
     limit: quota.limit,
     used: quota.count,
     remaining: quota.remaining,
-    day: quota.day,
+    day,
+    resetAt: getQuotaResetAt(day),
     unlimited: Boolean(quota.unlimited),
   };
+}
+
+function getQuotaResetAt(day) {
+  const [year, month, date] = String(day || '').split('-').map((part) => Number.parseInt(part, 10));
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(date)) return null;
+  return new Date(Date.UTC(year, month - 1, date + 1, 0, 0, 0)).toISOString();
 }
 
 function getDailyCreateLimit(env) {
@@ -2274,14 +2527,19 @@ function redirect(location, headers = {}) {
 }
 
 function unauthorizedJson() {
-  return jsonResponse({ success: false, error: '未登录' }, 401);
+  return apiErrorResponse({
+    code: 'UNAUTHORIZED',
+    message: '未登录',
+    status: 401,
+    retryable: false,
+  });
 }
 
 function corsHeaders() {
   return {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Idempotency-Key',
   };
 }
 

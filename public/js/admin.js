@@ -38,6 +38,13 @@
     loadPages();
   });
 
+  function getApiErrorMessage(data, fallback) {
+    if (data?.message) return data.message;
+    if (typeof data?.error === 'string') return data.error;
+    if (data?.error?.message) return data.error.message;
+    return fallback;
+  }
+
   async function loadPages() {
     showError('');
     renderLoading();
@@ -45,7 +52,7 @@
     try {
       const response = await fetch('/api/admin/pages');
       const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || '加载列表失败');
+      if (!response.ok || !data.success) throw new Error(getApiErrorMessage(data, '加载列表失败'));
 
       state.pages = data.pages || [];
       renderRows();
@@ -124,7 +131,7 @@
     try {
       const response = await fetch(`/api/admin/pages/${encodeURIComponent(id)}`);
       const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || '读取内容失败');
+      if (!response.ok || !data.success) throw new Error(getApiErrorMessage(data, '读取内容失败'));
 
       state.selected = data.page;
       renderRows();
@@ -193,7 +200,7 @@
     try {
       const response = await fetch(`/api/admin/pages/${encodeURIComponent(pageId)}/submissions?limit=50`);
       const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || '加载提交数据失败');
+      if (!response.ok || !data.success) throw new Error(getApiErrorMessage(data, '加载提交数据失败'));
 
       state.submissions = data.submissions || [];
       renderSubmissions();
@@ -254,7 +261,7 @@
         }),
       });
       const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || '保存失败');
+      if (!response.ok || !data.success) throw new Error(getApiErrorMessage(data, '保存失败'));
 
       await loadPages();
       await selectPage(state.selected.id);
@@ -277,7 +284,7 @@
         method: 'DELETE',
       });
       const data = await response.json();
-      if (!response.ok || !data.success) throw new Error(data.error || '删除失败');
+      if (!response.ok || !data.success) throw new Error(getApiErrorMessage(data, '删除失败'));
 
       state.selected = null;
       await loadPages();

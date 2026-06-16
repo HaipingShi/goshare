@@ -354,14 +354,18 @@ PUBLIC_SITE_URL:
 4. 从卡片进入 `/view/<id>`，确认正文渲染正常。
 5. 打开 `/bootstrap`，确认部署引导页能访问。
 6. 打开 `/landing`，确认 repo 分发落地页能访问。
-7. 使用 `AGENT_API_TOKEN` 调 `/api/agent/pages`，确认 Agent API 可创建页面。
+7. 使用 `AGENT_API_TOKEN` 调 `/api/v1/quota` 和 `/api/v1/agent/pages`，确认 Agent API 可创建页面。
 
 Agent API 示例：
 
 ```bash
-curl -X POST "$PUBLIC_SITE_URL/api/agent/pages" \
+curl "$PUBLIC_SITE_URL/api/v1/quota" \
+  -H "Authorization: Bearer $AGENT_API_TOKEN"
+
+curl -X POST "$PUBLIC_SITE_URL/api/v1/agent/pages" \
   -H "Authorization: Bearer $AGENT_API_TOKEN" \
   -H "Content-Type: application/json" \
+  -H "Idempotency-Key: smoke-test-$(date +%s)" \
   -d '{
     "content": "# Hello goshare\n\nCreated by an agent.",
     "codeType": "markdown",
@@ -391,17 +395,20 @@ Agent API test: pass/fail/not configured
 - 不要把真实 token 打印到聊天里、写入 README、提交到 Git 仓库，或放进公开前端代码。
 - Agent API 创建的内容同样会进入部署者自己的 R2/D1，并计入 `DAILY_AGENT_CREATE_LIMIT`。
 - API 返回的 `url` / `cardUrl` 是适合转发的 H5 分享卡片，`viewUrl` 是正文页。
+- 调用前可用 `/api/v1/quota` 预检额度；重试时必须复用同一个 `Idempotency-Key`，避免重复创建。
 
 交付给用户的 API 资料：
 
 ```txt
 Agent API endpoint:
+Quota endpoint:
 Authorization: Bearer <AGENT_API_TOKEN>
 Daily agent create limit:
 Recommended URL to share: cardUrl
 Content URL: viewUrl
 Run id field: runId
 Logs field: logs
+Failure field: error.code / error.message / error.retryable
 ```
 
 AI agent 使用 Prompt：
@@ -409,8 +416,15 @@ AI agent 使用 Prompt：
 ```text
 你可以直接调用我的 goshare Agent API 创建分享页，不需要打开网页 UI。
 
-接口：POST <PUBLIC_SITE_URL>/api/agent/pages
+接口：POST <PUBLIC_SITE_URL>/api/v1/agent/pages
+额度预检：GET <PUBLIC_SITE_URL>/api/v1/quota
 鉴权：Authorization: Bearer <AGENT_API_TOKEN>
+
+安全要求：
+- 从安全环境变量或本地 secret 管理器读取 AGENT_API_TOKEN。
+- 不要把真实 token 写进聊天、前端代码、Git 仓库或日志。
+- 创建前先预检 quota；失败时读取 error.code、error.message、quota 和 logs。
+- 如果需要重试，使用相同 Idempotency-Key，最多重试 1 次。
 
 请求 JSON：
 - content：HTML、Markdown、SVG 或 Mermaid 文本
@@ -419,15 +433,16 @@ AI agent 使用 Prompt：
 - title / summary：可选；不填时 goshare 会尝试生成或提取
 - isProtected：可选；true 时返回访问密码
 
-创建成功后，把响应里的 cardUrl 或 url 发给我用于转发；需要正文页时使用 viewUrl。失败时先读取 error、logs 和 quota，不要重复盲打请求。
+成功后，把响应里的 url 或 cardUrl 发给我用于转发；需要正文页时使用 viewUrl。失败时按 error.code 决策，不要重复盲打请求。
 ```
 
 curl 模板：
 
 ```bash
-curl -X POST "$PUBLIC_SITE_URL/api/agent/pages" \
+curl -X POST "$PUBLIC_SITE_URL/api/v1/agent/pages" \
   -H "Authorization: Bearer $AGENT_API_TOKEN" \
   -H "Content-Type: application/json" \
+  -H "Idempotency-Key: ${IDEMPOTENCY_KEY:-$(uuidgen 2>/dev/null || date +%s)}" \
   -d '{
     "content": "# Hello goshare\n\nCreated directly from an AI agent.",
     "codeType": "markdown",
@@ -440,29 +455,37 @@ curl -X POST "$PUBLIC_SITE_URL/api/agent/pages" \
 
 成功响应必须包含：
 
-```txt
-success: true
-url/cardUrl:
-viewUrl:
-urlId:
-runId:
-status: completed
-logs:
+```json
+{
+  "success": true,
+  "id": "abc123",
+  "url": "https://your-domain.example/share/abc123",
+  "cardUrl": "https://your-domain.example/share/abc123",
+  "viewUrl": "https://your-domain.example/view/abc123",
+  "urlId": "abc123",
+  "runId": "run_1234567890abcdef12",
+  "status": "completed",
+  "logs": [],
+  "quota": { "remaining": 199, "limit": 200, "resetAt": "2026-06-17T00:00:00.000Z" }
+}
 ```
 
 常见失败处理：
 
-- `401 Agent API 未配置 AGENT_API_TOKEN`：回到 Cloudflare Worker Secrets 设置 `AGENT_API_TOKEN`。
-- `401 请提供 Bearer Token`：请求缺少 `Authorization: Bearer ...`。
-- `401 Bearer Token 无效`：token 和 Worker Secret 不一致，重新设置或确认调用端变量。
-- `429 今日 Agent 创建次数已达上限`：达到 `DAILY_AGENT_CREATE_LIMIT`，第二天 UTC 重置，或在确认风险后调高限制。
-- `400 请求格式错误`：请求体不是合法 JSON，或 content/codeType 字段不符合要求。
+- `400 INVALID_JSON` / `INVALID_REQUEST`：修正 JSON 或字段，不原样重试。
+- `401 UNAUTHORIZED`：检查 token，不要把 token 打印到聊天。
+- `409 IDEMPOTENCY_CONFLICT`：同一个 `Idempotency-Key` 已用于不同内容，换 key 后再发。
+- `413 TOO_LARGE`：截断、压缩或拆分内容。
+- `422 INVALID_CONTENT`：内容未通过安全检测，不原样重试。
+- `429 QUOTA_EXCEEDED`：停止请求，告诉用户 `quota.resetAt`。
+- `5xx INTERNAL_ERROR`：如果 `error.retryable=true`，退避后最多重试 1 次。
 
 产出：
 
 ```txt
 Agent API handoff
 - Endpoint:
+- Quota endpoint:
 - Token stored as Worker Secret: yes/no
 - Token exposed in chat/repo: no
 - Daily agent create limit:

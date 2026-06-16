@@ -277,10 +277,10 @@ export function renderIndexPage(env) {
       </div>
       <div class="agent-api-endpoint-row">
         <span>Demo API Endpoint</span>
-        <code id="agent-api-endpoint">/api/pages/create</code>
+        <code id="agent-api-endpoint">/api/v1/pages/create</code>
       </div>
       <textarea id="agent-api-prompt" class="agent-api-prompt" readonly aria-label="AI Agent API 创建分享页提示词"></textarea>
-      <p class="agent-api-entry-note">这是公开 demo 创建接口，受每日额度和安全扫描限制。站点拥有者或授权 agent 才使用需要 <code>AGENT_API_TOKEN</code> 的 <code>/api/agent/pages</code>。</p>
+      <p class="agent-api-entry-note">这是公开 demo 创建接口，受每日额度和安全扫描限制。站点拥有者或授权 agent 才使用需要 <code>AGENT_API_TOKEN</code> 的 <code>/api/v1/agent/pages</code>。</p>
     </div>
     <div id="preview-section" class="card preview-card" hidden aria-live="polite">
       <div class="preview-card-header">
