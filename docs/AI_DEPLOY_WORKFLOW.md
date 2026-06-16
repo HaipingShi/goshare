@@ -77,7 +77,8 @@ rg -n "(AUTH_PASSWORD|AGENT_API_TOKEN|COOKIE_SECRET|api[_-]?key|secret|token|dat
 
 - 命中文档、示例变量名或占位符不等于泄露；AI agent 必须判断是否是真实 secret 或真实账号资源 ID。
 - 如果发现真实密码、token、API key、Cloudflare credential，立即停止并提醒用户轮换凭据。
-- 如果 `wrangler.jsonc` 里出现真实 D1 `database_id`，确认它没有被暂存或提交到公开仓库。
+- 如果 `wrangler.jsonc` 里出现真实 D1 `database_id`，优先迁移到被忽略的 `wrangler.production.jsonc`，并恢复 `wrangler.jsonc` 的占位 ID。
+- 如果使用 `wrangler.production.jsonc`，确认它被 `.gitignore` 忽略，且没有被暂存或提交。
 - 如果 `AUTH_ENABLED=false`，必须解释公开创建入口的风险，并征求用户确认。
 - 如果 `SECURITY_SCAN_ENABLED=false`，必须建议恢复为 `true`。
 - 如果 `DAILY_CREATE_LIMIT`、`DAILY_AGENT_CREATE_LIMIT`、`DAILY_AI_LIMIT` 为 `0`，必须解释这会关闭对应限额。
@@ -173,7 +174,9 @@ npx wrangler r2 bucket create goshare-content
 
 确认点：
 
-- `wrangler d1 create` 返回的真实 `database_id` 只能用于部署者本地配置，不能提交到公开仓库。
+- `wrangler d1 create` 返回的真实 `database_id` 只能写入部署者本地配置，不能提交到公开仓库。
+- 推荐把真实生产配置写入 `wrangler.production.jsonc`，并确认该文件被 `.gitignore` 忽略。
+- 公开 `wrangler.jsonc` 应保持 `00000000-0000-0000-0000-000000000000` 占位 ID。
 
 产出：
 
@@ -251,6 +254,12 @@ PUBLIC_SITE_URL:
 npm run db:migrate:remote
 ```
 
+使用本地生产配置时：
+
+```bash
+npm run db:migrate:remote -- --config wrangler.production.jsonc
+```
+
 或：
 
 ```bash
@@ -277,6 +286,12 @@ Last applied migration:
 
 ```bash
 npx wrangler deploy
+```
+
+使用本地生产配置时：
+
+```bash
+npx wrangler deploy --config wrangler.production.jsonc
 ```
 
 Deploy Button 路径：

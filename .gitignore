@@ -38,6 +38,9 @@ sessions/
 
 # Cloudflare 本地状态
 .wrangler/
+wrangler.local.jsonc
+wrangler.production.jsonc
+wrangler.*.local.jsonc
 
 # 操作系统文件
 .DS_Store

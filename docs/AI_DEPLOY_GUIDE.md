@@ -117,9 +117,17 @@ npx wrangler deploy
 
 注意：
 
-- `wrangler d1 create` 会返回真实 `database_id`。它可以写入本地 `wrangler.jsonc` 用于部署，但不要提交到公开仓库。
+- `wrangler d1 create` 会返回真实 `database_id`。建议复制一份本地生产配置到 `wrangler.production.jsonc`，把真实 ID 写在那里；这个文件已被 `.gitignore` 忽略。
+- 公开仓库里的 `wrangler.jsonc` 应保持占位配置，不要长期写入真实生产 `database_id`。
 - 如果仓库里的 `database_id` 是 `00000000-0000-0000-0000-000000000000`，这是公开模板占位符，不是真实生产数据库。
 - `secret put` 会在终端要求输入值，输入时不会显示明文，这是正常现象。
+
+使用本地生产配置部署时，命令示例：
+
+```bash
+npm run db:migrate:remote -- --config wrangler.production.jsonc
+npx wrangler deploy --config wrangler.production.jsonc
+```
 
 ## 远端 D1 迁移
 
