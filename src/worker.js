@@ -1967,7 +1967,7 @@ function injectShareMeta(html, metadata, env) {
 
   const title = metadata.title || 'goshare 分享';
   const summary = metadata.summary || '一份通过 goshare 发布的内容。';
-  const imageUrl = String(env.APP_LOGO_URL || '/icon/web/icon-512.png').trim() || '/icon/web/icon-512.png';
+  const imageUrl = resolveShareImageUrl(env, metadata.url);
   const meta = [
     `<meta property="og:title" content="${escapeHtmlAttribute(title)}">`,
     `<meta property="og:description" content="${escapeHtmlAttribute(summary)}">`,
@@ -1980,6 +1980,23 @@ function injectShareMeta(html, metadata, env) {
   ].join('\n');
 
   return html.replace('</head>', `${meta}\n</head>`);
+}
+
+function resolveShareImageUrl(env, pageUrl) {
+  const configured = String(env.APP_LOGO_URL || '/icon/web/icon-512.png').trim() || '/icon/web/icon-512.png';
+  if (/^https?:\/\//i.test(configured)) return configured;
+
+  const publicSiteUrl = String(env.PUBLIC_SITE_URL || '').trim().replace(/\/+$/, '');
+  if (publicSiteUrl) {
+    return `${publicSiteUrl}${configured.startsWith('/') ? configured : `/${configured}`}`;
+  }
+
+  try {
+    const origin = new URL(pageUrl || '').origin;
+    return `${origin}${configured.startsWith('/') ? configured : `/${configured}`}`;
+  } catch {
+    return configured;
+  }
 }
 
 function injectGoshareDataSdk(html, pageId) {

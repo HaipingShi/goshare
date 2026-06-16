@@ -18,8 +18,9 @@ function getAppConfig(env = {}) {
   const footerText = String(env.APP_FOOTER_TEXT || '').trim();
   const footerUrl = String(env.APP_FOOTER_URL || '').trim();
   const repoUrl = String(env.APP_REPO_URL || DEFAULT_REPO_URL).trim() || DEFAULT_REPO_URL;
-  const publicSiteUrl = String(env.PUBLIC_SITE_URL || '').trim();
+  const publicSiteUrl = String(env.PUBLIC_SITE_URL || '').trim().replace(/\/+$/, '');
   const logoUrl = String(env.APP_LOGO_URL || DEFAULT_APP_LOGO_URL).trim() || DEFAULT_APP_LOGO_URL;
+  const absoluteLogoUrl = toAbsolutePublicUrl(publicSiteUrl, logoUrl);
 
   return {
     appName,
@@ -29,7 +30,25 @@ function getAppConfig(env = {}) {
     repoUrl,
     publicSiteUrl,
     logoUrl,
+    absoluteLogoUrl,
   };
+}
+
+function toAbsolutePublicUrl(publicSiteUrl, value) {
+  const url = String(value || '').trim();
+  if (!url) return url;
+  if (/^https?:\/\//i.test(url)) return url;
+  if (!publicSiteUrl) return url;
+  const path = url.startsWith('/') ? url : `/${url}`;
+  return `${publicSiteUrl}${path}`;
+}
+
+function getUrlOrigin(value) {
+  try {
+    return new URL(String(value || '')).origin;
+  } catch {
+    return '';
+  }
 }
 
 function buildDeployButtonUrl(repoUrl) {
@@ -69,7 +88,7 @@ function head({ title, extraHead = '', env, defaultOg = true } = {}) {
     <meta property="og:title" content="${escapeHtml(config.appName)} | ${escapeHtml(config.appDescription)}">
     <meta property="og:description" content="一个简单、高效的HTML代码分享平台">
     <meta property="og:type" content="website">
-    <meta property="og:image" content="${escapeHtml(config.logoUrl)}">` : '';
+    <meta property="og:image" content="${escapeHtml(config.absoluteLogoUrl)}">` : '';
   return `
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -700,13 +719,14 @@ export function renderShareCardPage({ page, shareUrl, viewUrl }, env) {
   const codeType = String(page.code_type || 'html').toUpperCase();
   const isProtected = page.is_protected === 1 || page.is_protected === true;
   const createdDate = formatShareDate(page.created_at);
+  const cardLogoUrl = toAbsolutePublicUrl(getUrlOrigin(shareUrl) || config.publicSiteUrl, config.logoUrl);
   const extraHead = `
     <meta name="description" content="${escapeHtml(summary)}">
     <meta property="og:title" content="${escapeHtml(title)}">
     <meta property="og:description" content="${escapeHtml(summary)}">
     <meta property="og:type" content="article">
     <meta property="og:url" content="${escapeHtml(shareUrl)}">
-    <meta property="og:image" content="${escapeHtml(config.logoUrl)}">
+    <meta property="og:image" content="${escapeHtml(cardLogoUrl)}">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="${escapeHtml(title)}">
     <meta name="twitter:description" content="${escapeHtml(summary)}">
@@ -771,6 +791,18 @@ export function renderShareCardPage({ page, shareUrl, viewUrl }, env) {
         border-radius: 8px;
         object-fit: cover;
         background: rgba(255, 255, 255, 0.08);
+      }
+
+      .share-logo-fallback {
+        display: none;
+        width: 44px;
+        height: 44px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        color: #f8fafc;
+        background: linear-gradient(135deg, #2563eb, #0891b2);
+        font: 700 1.1rem 'Orbitron', sans-serif;
       }
 
       .share-brand-text {
@@ -888,7 +920,8 @@ export function renderShareCardPage({ page, shareUrl, viewUrl }, env) {
   <article class="share-card">
     <div class="share-card-inner">
       <div class="share-brand">
-        <img class="share-logo" src="${escapeHtml(config.logoUrl)}" alt="${escapeHtml(config.appName)} logo">
+        <img class="share-logo" src="${escapeHtml(cardLogoUrl)}" alt="${escapeHtml(config.appName)} logo" onerror="this.style.display='none';this.nextElementSibling.style.display='inline-flex';">
+        <span class="share-logo-fallback" aria-hidden="true">${escapeHtml(config.appName.slice(0, 1).toUpperCase())}</span>
         <div class="share-brand-text">
           <span class="share-app-name">${escapeHtml(config.appName)}</span>
           <span class="share-app-desc">${escapeHtml(config.appDescription)}</span>
