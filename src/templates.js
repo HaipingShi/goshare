@@ -219,6 +219,10 @@ export function renderIndexPage(env) {
                 <option value="bytedance">字节风格</option>
                 <option value="github">GitHub</option>
                 <option value="docs">技术文档</option>
+                <option value="clean">清爽白纸</option>
+                <option value="magazine">杂志长文</option>
+                <option value="note">便签笔记</option>
+                <option value="slate">深色演示</option>
               </select>
             </label>
           </div>
@@ -1329,6 +1333,10 @@ export function renderAdminPage(env) {
               <option value="bytedance">字节风格</option>
               <option value="github">GitHub</option>
               <option value="docs">技术文档</option>
+              <option value="clean">清爽白纸</option>
+              <option value="magazine">杂志长文</option>
+              <option value="note">便签笔记</option>
+              <option value="slate">深色演示</option>
             </select>
           </div>
           <label class="admin-inline admin-muted">

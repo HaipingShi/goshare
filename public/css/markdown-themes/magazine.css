@@ -1,0 +1,90 @@
+/* Editorial magazine Markdown theme */
+
+body.markdown-page-magazine {
+  background: #f8f1e8;
+}
+
+.markdown-body.markdown-theme-magazine {
+  width: min(100% - 34px, 900px);
+  margin: 36px auto;
+  padding: 54px 58px;
+  border: 1px solid #ead9c3;
+  border-radius: 4px;
+  background: #fffaf3;
+  color: #2d251f;
+  font-family: "Noto Serif SC", "Source Han Serif SC", Georgia, serif;
+  font-size: 17px;
+  line-height: 1.92;
+  box-shadow: 0 24px 54px rgba(96, 61, 32, 0.11);
+}
+
+.markdown-theme-magazine h1 {
+  margin: 0 0 30px;
+  color: #1f1711;
+  font-size: 2.45rem;
+  line-height: 1.18;
+  letter-spacing: 0;
+}
+
+.markdown-theme-magazine h1::after {
+  content: "";
+  display: block;
+  width: 72px;
+  height: 3px;
+  margin-top: 20px;
+  background: #b45309;
+}
+
+.markdown-theme-magazine h2 {
+  margin: 46px 0 18px;
+  color: #7c2d12;
+  font-size: 1.52rem;
+}
+
+.markdown-theme-magazine h3 {
+  margin: 32px 0 12px;
+  color: #374151;
+  font-size: 1.18rem;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.markdown-theme-magazine blockquote {
+  margin: 28px 0;
+  padding: 18px 24px;
+  border-left: 0;
+  border-top: 1px solid #d6b896;
+  border-bottom: 1px solid #d6b896;
+  background: #fff3df;
+  color: #4b3526;
+  font-size: 1.05em;
+}
+
+.markdown-theme-magazine strong {
+  color: #9a3412;
+}
+
+.markdown-theme-magazine table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px;
+}
+
+.markdown-theme-magazine th,
+.markdown-theme-magazine td {
+  border-bottom: 1px solid #e7d5bd;
+  padding: 10px 12px;
+}
+
+.markdown-theme-magazine th {
+  color: #7c2d12;
+  background: #fff3df;
+}
+
+@media (max-width: 720px) {
+  .markdown-body.markdown-theme-magazine {
+    width: min(100% - 20px, 900px);
+    margin: 16px auto;
+    padding: 28px 20px;
+  }
+}

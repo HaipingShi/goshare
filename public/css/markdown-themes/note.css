@@ -1,0 +1,81 @@
+/* Warm note Markdown theme */
+
+body.markdown-page-note {
+  background: #fff8dc;
+}
+
+.markdown-body.markdown-theme-note {
+  width: min(100% - 32px, 820px);
+  margin: 34px auto;
+  padding: 44px 48px;
+  border: 1px solid #ead48a;
+  border-radius: 8px;
+  background:
+    linear-gradient(#0000 31px, rgba(202, 138, 4, 0.13) 32px),
+    #fffdf2;
+  background-size: 100% 32px;
+  color: #3f2f12;
+  font-family: "Noto Serif SC", "PingFang SC", "Microsoft YaHei", serif;
+  font-size: 16px;
+  line-height: 2;
+  box-shadow: 0 18px 42px rgba(120, 78, 0, 0.12);
+}
+
+.markdown-theme-note h1,
+.markdown-theme-note h2,
+.markdown-theme-note h3 {
+  color: #713f12;
+  font-family: "Noto Serif SC", "PingFang SC", "Microsoft YaHei", serif;
+}
+
+.markdown-theme-note h1 {
+  margin: 0 0 26px;
+  font-size: 2.05rem;
+}
+
+.markdown-theme-note h2 {
+  margin: 40px 0 14px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: #fef3c7;
+  font-size: 1.36rem;
+}
+
+.markdown-theme-note h3 {
+  margin: 28px 0 10px;
+  font-size: 1.12rem;
+}
+
+.markdown-theme-note blockquote {
+  margin: 22px 0;
+  padding: 14px 18px;
+  border-left: 4px solid #d97706;
+  border-radius: 0 6px 6px 0;
+  background: #fffbeb;
+  color: #4b3716;
+}
+
+.markdown-theme-note table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fffef7;
+}
+
+.markdown-theme-note th,
+.markdown-theme-note td {
+  border: 1px solid #ead48a;
+  padding: 10px 12px;
+}
+
+.markdown-theme-note th {
+  background: #fef3c7;
+  color: #713f12;
+}
+
+@media (max-width: 720px) {
+  .markdown-body.markdown-theme-note {
+    width: min(100% - 20px, 820px);
+    margin: 16px auto;
+    padding: 26px 18px;
+  }
+}

@@ -1,0 +1,89 @@
+/* Clean white-paper Markdown theme */
+
+body.markdown-page-clean {
+  background: #f8fafc;
+}
+
+.markdown-body.markdown-theme-clean {
+  width: min(100% - 32px, 860px);
+  margin: 34px auto;
+  padding: 48px 52px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #1f2937;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 16px;
+  line-height: 1.78;
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.06);
+}
+
+.markdown-theme-clean h1,
+.markdown-theme-clean h2,
+.markdown-theme-clean h3,
+.markdown-theme-clean h4 {
+  color: #0f172a;
+  line-height: 1.28;
+}
+
+.markdown-theme-clean h1 {
+  margin: 0 0 28px;
+  padding-bottom: 18px;
+  border-bottom: 2px solid #e2e8f0;
+  font-size: 2.2rem;
+}
+
+.markdown-theme-clean h2 {
+  margin: 42px 0 16px;
+  font-size: 1.45rem;
+}
+
+.markdown-theme-clean h2::before {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 0.95em;
+  margin-right: 10px;
+  border-radius: 2px;
+  background: #2563eb;
+  vertical-align: -0.1em;
+}
+
+.markdown-theme-clean h3 {
+  margin: 30px 0 10px;
+  color: #1e40af;
+  font-size: 1.16rem;
+}
+
+.markdown-theme-clean blockquote {
+  margin: 22px 0;
+  padding: 14px 18px;
+  border-left: 4px solid #2563eb;
+  border-radius: 0 6px 6px 0;
+  background: #eff6ff;
+}
+
+.markdown-theme-clean table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 24px 0;
+}
+
+.markdown-theme-clean th,
+.markdown-theme-clean td {
+  border: 1px solid #dbe3ef;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.markdown-theme-clean th {
+  background: #f1f5f9;
+}
+
+@media (max-width: 720px) {
+  .markdown-body.markdown-theme-clean {
+    width: min(100% - 20px, 860px);
+    margin: 16px auto;
+    padding: 26px 18px;
+  }
+}

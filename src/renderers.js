@@ -14,6 +14,10 @@ export const MARKDOWN_THEMES = {
   BYTEDANCE: 'bytedance',
   GITHUB: 'github',
   DOCS: 'docs',
+  CLEAN: 'clean',
+  MAGAZINE: 'magazine',
+  NOTE: 'note',
+  SLATE: 'slate',
 };
 
 const VALID_MARKDOWN_THEMES = new Set(Object.values(MARKDOWN_THEMES));
@@ -336,6 +340,7 @@ function renderMarkdown(content, theme) {
   ${viewerIcons()}
   <link rel="stylesheet" href="${getMarkdownThemeStylesheet(markdownTheme)}">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/atom-one-dark.min.css">
+  <link rel="stylesheet" href="/css/markdown-contrast.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Noto+Serif+SC:wght@400;500;600&display=swap" rel="stylesheet">
@@ -405,6 +410,14 @@ function getMarkdownThemeStylesheet(theme) {
       return '/css/markdown-themes/github.css';
     case MARKDOWN_THEMES.DOCS:
       return '/css/markdown-themes/docs.css';
+    case MARKDOWN_THEMES.CLEAN:
+      return '/css/markdown-themes/clean.css';
+    case MARKDOWN_THEMES.MAGAZINE:
+      return '/css/markdown-themes/magazine.css';
+    case MARKDOWN_THEMES.NOTE:
+      return '/css/markdown-themes/note.css';
+    case MARKDOWN_THEMES.SLATE:
+      return '/css/markdown-themes/slate.css';
     case MARKDOWN_THEMES.BYTEDANCE:
     default:
       return '/css/markdown-bytedance.css';
@@ -432,6 +445,26 @@ function getMarkdownThemePageStyles(theme) {
       body.markdown-page-docs {
         background-color: #111827;
       }
+    }`;
+    case MARKDOWN_THEMES.SLATE:
+      return `
+    body.markdown-page-slate {
+      background-color: #0f172a;
+    }`;
+    case MARKDOWN_THEMES.CLEAN:
+      return `
+    body.markdown-page-clean {
+      background-color: #f8fafc;
+    }`;
+    case MARKDOWN_THEMES.MAGAZINE:
+      return `
+    body.markdown-page-magazine {
+      background-color: #f8f1e8;
+    }`;
+    case MARKDOWN_THEMES.NOTE:
+      return `
+    body.markdown-page-note {
+      background-color: #fff8dc;
     }`;
     case MARKDOWN_THEMES.BYTEDANCE:
     default:

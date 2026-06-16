@@ -1,0 +1,105 @@
+/* Shared Markdown readability guardrails.
+   Loaded after each theme and highlight.js to keep text/background contrast stable. */
+
+.markdown-body {
+  color: #1f2937;
+}
+
+.markdown-body p,
+.markdown-body li,
+.markdown-body td,
+.markdown-body blockquote {
+  color: inherit;
+}
+
+.markdown-body a {
+  color: #075985;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+
+.markdown-body code:not(pre code) {
+  color: #8a2c0d;
+  background: #fff4e6;
+  border: 1px solid #fed7aa;
+}
+
+.markdown-body pre,
+.markdown-body .hljs {
+  color: #e5edf6 !important;
+  background: #111827 !important;
+}
+
+.markdown-body pre {
+  border: 1px solid #334155;
+}
+
+.markdown-body pre code,
+.markdown-body pre code.hljs {
+  color: #e5edf6 !important;
+  background: transparent !important;
+}
+
+.markdown-body kbd {
+  color: #111827;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+}
+
+.markdown-body mark {
+  color: #111827;
+  background: #fde68a;
+}
+
+.markdown-body table {
+  color: #1f2937;
+}
+
+.markdown-body th {
+  color: #111827;
+}
+
+.markdown-body blockquote {
+  color: #374151;
+}
+
+.markdown-body .mermaid {
+  color: #111827;
+}
+
+@media (prefers-color-scheme: dark) {
+  .markdown-body:not(.markdown-theme-clean):not(.markdown-theme-magazine):not(.markdown-theme-note) {
+    color: #e5e7eb;
+  }
+
+  .markdown-body:not(.markdown-theme-clean):not(.markdown-theme-magazine):not(.markdown-theme-note) a {
+    color: #7dd3fc;
+  }
+
+  .markdown-body:not(.markdown-theme-clean):not(.markdown-theme-magazine):not(.markdown-theme-note) code:not(pre code) {
+    color: #fde68a;
+    background: #3a2a0a;
+    border-color: #854d0e;
+  }
+
+  .markdown-body:not(.markdown-theme-clean):not(.markdown-theme-magazine):not(.markdown-theme-note) kbd {
+    color: #e5e7eb;
+    background: #1f2937;
+    border-color: #4b5563;
+  }
+
+  .markdown-body:not(.markdown-theme-clean):not(.markdown-theme-magazine):not(.markdown-theme-note) mark {
+    color: #111827;
+    background: #facc15;
+  }
+
+  .markdown-body:not(.markdown-theme-clean):not(.markdown-theme-magazine):not(.markdown-theme-note) table,
+  .markdown-body:not(.markdown-theme-clean):not(.markdown-theme-magazine):not(.markdown-theme-note) th,
+  .markdown-body:not(.markdown-theme-clean):not(.markdown-theme-magazine):not(.markdown-theme-note) td {
+    color: #e5e7eb;
+  }
+
+  .markdown-body:not(.markdown-theme-clean):not(.markdown-theme-magazine):not(.markdown-theme-note) blockquote {
+    color: #d1d5db;
+  }
+}
