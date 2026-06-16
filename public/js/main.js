@@ -95,6 +95,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const generatedPassword = document.getElementById('generated-password');
   const copyPasswordOnly = document.getElementById('copy-password-button');
   const copyPasswordLink = document.getElementById('copy-password-link');
+  const agentApiEndpoint = document.getElementById('agent-api-endpoint');
+  const agentApiPrompt = document.getElementById('agent-api-prompt');
+  const copyAgentApiPrompt = document.getElementById('copy-agent-api-prompt');
   
   // 创建代码编辑器
   let codeElement = null;
@@ -105,6 +108,65 @@ document.addEventListener('DOMContentLoaded', () => {
   let previewContent = '';
   let previewCodeType = '';
   let previewMarkdownTheme = '';
+
+  function copyTextToClipboard(text) {
+    try {
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-999999px';
+      textArea.style.top = '-999999px';
+      document.body.appendChild(textArea);
+      textArea.focus();
+      textArea.select();
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      return successful;
+    } catch (error) {
+      console.error('复制失败:', error);
+      return false;
+    }
+  }
+
+  function renderAgentApiPrompt() {
+    if (!agentApiPrompt || !agentApiEndpoint) return;
+    const endpoint = `${window.location.origin}/api/agent/pages`;
+    agentApiEndpoint.textContent = endpoint;
+    agentApiPrompt.value = `你可以直接调用我的 goshare Agent API 创建分享页，不需要打开网页 UI。
+
+接口：POST ${endpoint}
+鉴权：Authorization: Bearer <AGENT_API_TOKEN>
+
+安全要求：
+- 从安全环境变量或本地 secret 管理器读取 AGENT_API_TOKEN。
+- 不要把真实 token 写进聊天、前端代码、Git 仓库或日志。
+- 请求失败时先读取 error、logs 和 quota，不要重复盲打请求。
+
+请求 JSON 字段：
+- content：HTML、Markdown、SVG 或 Mermaid 文本。
+- codeType：html、markdown、svg、mermaid 或 zip。
+- markdownTheme：Markdown 可选 bytedance、github、docs、clean、magazine、note、slate。
+- title / summary：可选；不填时 goshare 会尝试生成或提取。
+- isProtected：可选；true 时返回临时访问密码。
+
+curl 示例：
+curl -X POST "${endpoint}" \\
+  -H "Authorization: Bearer $AGENT_API_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "content": "# Hello goshare\\n\\nCreated directly from an AI agent.",
+    "codeType": "markdown",
+    "markdownTheme": "github",
+    "title": "Hello goshare",
+    "summary": "Created directly from an AI agent.",
+    "isProtected": false
+  }'
+
+成功后：
+- 把响应里的 cardUrl 或 url 发给我用于转发。
+- 需要正文页时使用 viewUrl。
+- 记录 runId，方便排查本次 Agent API 调用。`;
+  }
   
   // 初始化代码编辑器 - 简化版本，不使用双层结构
   function initCodeEditor() {
@@ -722,6 +784,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 初始化代码编辑器
   initCodeEditor();
+  renderAgentApiPrompt();
+
+  if (copyAgentApiPrompt) {
+    copyAgentApiPrompt.addEventListener('click', () => {
+      if (!agentApiPrompt || !agentApiPrompt.value) {
+        showErrorToast('没有可复制的 Agent Prompt');
+        return;
+      }
+
+      if (copyTextToClipboard(agentApiPrompt.value)) {
+        showSuccessToast('Agent Prompt 已复制');
+        copyAgentApiPrompt.innerHTML = '<i class="fas fa-check mr-1" aria-hidden="true"></i>已复制';
+        setTimeout(() => {
+          copyAgentApiPrompt.innerHTML = '<i class="fas fa-copy mr-1" aria-hidden="true"></i>复制 Agent Prompt';
+        }, 1400);
+      } else {
+        showErrorToast('复制 Agent Prompt 失败');
+      }
+    });
+  }
   
   // 在输入框内容变化时检测代码类型并更新高亮
   if (htmlInput) {
