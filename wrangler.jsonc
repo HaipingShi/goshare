@@ -31,7 +31,11 @@
     "MAX_BEAUTIFY_CONTENT_KB": "120",
     "AI_SHARE_METADATA_ENABLED": "true",
     "AI_SHARE_METADATA_MODEL": "@cf/zai-org/glm-4.7-flash",
-    "MAX_SHARE_METADATA_CONTENT_KB": "24"
+    "MAX_SHARE_METADATA_CONTENT_KB": "24",
+    "SECURITY_SCAN_ENABLED": "true",
+    "DAILY_CREATE_LIMIT": "50",
+    "DAILY_AGENT_CREATE_LIMIT": "200",
+    "DAILY_AI_LIMIT": "20"
   },
   "d1_databases": [
     {

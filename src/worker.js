@@ -29,6 +29,10 @@ const DEFAULT_SHARE_METADATA_MODEL = DEFAULT_BEAUTIFY_MODEL;
 const DEFAULT_MAX_SHARE_METADATA_CONTENT_LENGTH = 24 * 1024;
 const MAX_SHARE_TITLE_LENGTH = 80;
 const MAX_SHARE_SUMMARY_LENGTH = 180;
+const DEFAULT_DAILY_CREATE_LIMIT = 50;
+const DEFAULT_DAILY_AGENT_CREATE_LIMIT = 200;
+const DEFAULT_DAILY_AI_LIMIT = 20;
+const MAX_SECURITY_SCAN_CONTENT_LENGTH = 256 * 1024;
 const VALID_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
 const VALID_CODE_TYPES = new Set([
   CODE_TYPES.HTML,
@@ -217,6 +221,11 @@ async function createPage(request, env) {
   const payload = await readJsonPayload(request);
   if (!payload.ok) return payload.response;
 
+  const quota = await enforceDailyLimit(env, `create:${await getSubmitterKey(request, env)}`, getDailyCreateLimit(env));
+  if (!quota.ok) {
+    return dailyLimitResponse(quota, '今日创建次数已达上限');
+  }
+
   const result = await createSharePageFromPayload(payload.data, env, {
     ownerKey: owner.ownerKey,
   });
@@ -234,6 +243,8 @@ async function createPage(request, env) {
     isProtected: result.page.isProtected,
     title: result.page.title,
     summary: result.page.summary,
+    securityWarnings: result.page.securityWarnings,
+    quota: quotaSummary(quota),
   }, 200, owner.cookieHeader ? { 'Set-Cookie': owner.cookieHeader } : {});
 }
 
@@ -257,11 +268,17 @@ async function createAgentPage(request, env) {
     }
     await appendAgentRunLog(env, runId, logs, 'info', 'create_payload_received');
 
+    const quota = await enforceDailyLimit(env, `agent-create:${auth.agentKey}`, getDailyAgentCreateLimit(env));
+    if (!quota.ok) {
+      await appendAgentRunLog(env, runId, logs, 'error', 'daily_limit_exceeded', quotaSummary(quota));
+      return finishAgentRunWithFailure(env, runId, logs, '今日 Agent 创建次数已达上限', 429);
+    }
+
     const result = await createSharePageFromPayload(payload.data, env, {
       ownerKey: auth.ownerKey,
     });
     if (!result.ok) {
-      return finishAgentRunWithFailure(env, runId, logs, result.error, result.status);
+      return finishAgentRunWithFailure(env, runId, logs, result.error, result.status, result.details);
     }
 
     const url = buildShareCardUrl(request, env, result.page.urlId);
@@ -276,6 +293,8 @@ async function createAgentPage(request, env) {
       markdownTheme: result.page.markdownTheme,
       isProtected: result.page.isProtected,
       contentSize: result.page.contentSize,
+      securityWarnings: result.page.securityWarnings,
+      quota: quotaSummary(quota),
     });
     await updateAgentRunStatus(env, runId, 'completed', result.page.urlId, null);
     await appendAgentRunLog(env, runId, logs, 'info', 'agent_run_completed');
@@ -290,6 +309,8 @@ async function createAgentPage(request, env) {
       status: 'completed',
       title: result.page.title,
       summary: result.page.summary,
+      securityWarnings: result.page.securityWarnings,
+      quota: quotaSummary(quota),
       logs,
     }, 201);
   } catch (error) {
@@ -361,6 +382,7 @@ async function createSharePageFromPayload(payload, env, options = {}) {
   let contentSize;
   let zipBytes = null;
   let files = null;
+  let security = { findings: [] };
 
   if (codeType === CODE_TYPES.ZIP) {
     zipBytes = safeBase64UrlDecodeToBytes(zipContent);
@@ -400,10 +422,28 @@ async function createSharePageFromPayload(payload, env, options = {}) {
 
       return createPageError('ZIP 压缩包内未找到 `index.html` 入口文件，静态网页需要以 index.html 作为首页入口。', 400);
     }
+
+    security = scanShareContent({
+      env,
+      content: extractZipSecurityScanText(files),
+      codeType,
+    });
+    if (!security.ok) {
+      return createPageError(security.error, 422, security);
+    }
   } else {
     contentHash = await sha256Hex(htmlContent);
     const encoder = new TextEncoder();
     contentSize = encoder.encode(htmlContent).byteLength;
+
+    security = scanShareContent({
+      env,
+      content: htmlContent,
+      codeType,
+    });
+    if (!security.ok) {
+      return createPageError(security.error, 422, security);
+    }
   }
 
   const metadata = await generateShareMetadata({
@@ -480,6 +520,7 @@ async function createSharePageFromPayload(payload, env, options = {}) {
           summary: metadata.summary,
           metadataSource: metadata.source,
           shareCardTheme,
+          securityWarnings: security.findings || [],
         },
       };
     } catch (error) {
@@ -493,11 +534,12 @@ async function createSharePageFromPayload(payload, env, options = {}) {
   return createPageError('创建页面失败', 500);
 }
 
-function createPageError(error, status) {
+function createPageError(error, status, details = {}) {
   return {
     ok: false,
     error,
     status,
+    details,
   };
 }
 
@@ -505,11 +547,15 @@ function createPageErrorResponse(result) {
   return jsonResponse({
     success: false,
     error: result.error,
+    securityFindings: result.details?.findings || undefined,
   }, result.status || 500);
 }
 
-async function finishAgentRunWithFailure(env, runId, logs, error, statusCode = 500) {
-  await appendAgentRunLog(env, runId, logs, 'error', 'agent_run_failed', { error });
+async function finishAgentRunWithFailure(env, runId, logs, error, statusCode = 500, details = {}) {
+  await appendAgentRunLog(env, runId, logs, 'error', 'agent_run_failed', {
+    error,
+    securityFindings: details.findings,
+  });
   await updateAgentRunStatus(env, runId, 'failed', null, error);
 
   return jsonResponse({
@@ -517,6 +563,7 @@ async function finishAgentRunWithFailure(env, runId, logs, error, statusCode = 5
     runId,
     status: 'failed',
     error,
+    securityFindings: details.findings,
     logs,
   }, statusCode);
 }
@@ -680,6 +727,11 @@ async function beautifyPage(request, env) {
     return jsonResponse({ success: false, error: 'ZIP 静态网站暂不支持智能美化。' }, 400);
   }
 
+  const quota = await enforceDailyLimit(env, `ai:${await getSubmitterKey(request, env)}`, getDailyAiLimit(env));
+  if (!quota.ok) {
+    return dailyLimitResponse(quota, '今日智能美化次数已达上限');
+  }
+
   const maxBeautifyContentLength = getMaxBeautifyContentLength(env);
   if (input.content.length > maxBeautifyContentLength) {
     return jsonResponse({ success: false, error: `智能美化内容过大，请控制在${Math.floor(maxBeautifyContentLength / 1024)}KB以内。` }, 413);
@@ -729,6 +781,7 @@ async function beautifyPage(request, env) {
     codeType: normalizedCodeType,
     htmlContent: beautifiedContent,
     warnings: Array.isArray(parsed.value.warnings) ? parsed.value.warnings.slice(0, 5) : [],
+    quota: quotaSummary(quota),
   });
 }
 
@@ -1341,6 +1394,224 @@ function parseStoredJson(value) {
   } catch {
     return null;
   }
+}
+
+function scanShareContent({ env, content, codeType }) {
+  if (!isSecurityScanEnabled(env)) {
+    return { ok: true, findings: [] };
+  }
+
+  const source = prepareSecurityScanContent(content, codeType).slice(0, MAX_SECURITY_SCAN_CONTENT_LENGTH);
+  const findings = [];
+
+  addSecurityFinding(findings, {
+    id: 'password-input',
+    severity: 'high',
+    message: '包含密码输入框，容易被用于钓鱼或凭据采集。',
+    matched: /<input[^>]+type=["']?password/i.test(source),
+  });
+  addSecurityFinding(findings, {
+    id: 'credential-fields',
+    severity: 'high',
+    message: '包含验证码、助记词、私钥或银行卡等敏感信息采集字段。',
+    matched: /<input[^>]+(?:name|id|placeholder)=["'][^"']*(otp|2fa|verification|验证码|助记词|mnemonic|seed|private.?key|私钥|card.?number|银行卡|cvv)[^"']*["']/i.test(source),
+  });
+  addSecurityFinding(findings, {
+    id: 'external-form-action',
+    severity: 'high',
+    message: '表单会提交到外部站点，可能收集访问者输入。',
+    matched: /<form[^>]+action=["']https?:\/\//i.test(source),
+  });
+  addSecurityFinding(findings, {
+    id: 'external-credential-submit',
+    severity: 'high',
+    message: '页面同时包含表单输入和外部网络提交代码，存在凭据外传风险。',
+    matched: /<(form|input|textarea|select)\b/i.test(source) && /\b(fetch|sendbeacon|xmlhttprequest|axios)\s*\(?\s*["'`]https?:\/\//i.test(source),
+  });
+  addSecurityFinding(findings, {
+    id: 'cookie-exfiltration',
+    severity: 'high',
+    message: '脚本读取 Cookie 并发起网络请求，存在会话信息外传风险。',
+    matched: /document\.cookie/i.test(source) && /\b(fetch|sendbeacon|xmlhttprequest|navigator\.sendbeacon|new\s+image)\b/i.test(source),
+  });
+  addSecurityFinding(findings, {
+    id: 'automatic-redirect',
+    severity: 'high',
+    message: '页面包含自动跳转到外部站点的代码，可能用于钓鱼落地页。',
+    matched: /<meta[^>]+http-equiv=["']refresh["'][^>]+url\s*=\s*https?:\/\//i.test(source)
+      || /\b(location\.(href|replace|assign)|window\.open)\s*\(?\s*["'`]https?:\/\//i.test(source),
+  });
+  addSecurityFinding(findings, {
+    id: 'brand-impersonation',
+    severity: 'high',
+    message: '页面疑似冒充常见登录/支付/钱包服务并采集输入。',
+    matched: /<(form|input)\b/i.test(source)
+      && /(cloudflare|github|google|microsoft|apple|paypal|stripe|metamask|wallet|银行|支付宝|微信支付|登录|密码|验证码)/i.test(source),
+  });
+  addSecurityFinding(findings, {
+    id: 'dangerous-script-obfuscation',
+    severity: 'high',
+    message: '脚本包含 eval、Function 构造器或高度混淆执行模式。',
+    matched: /\b(eval|settimeout|setinterval)\s*\(\s*(atob|unescape|decodeuricomponent|["'`][\s\S]{120,})/i.test(source)
+      || /new\s+Function\s*\(/i.test(source),
+  });
+  addSecurityFinding(findings, {
+    id: 'external-script',
+    severity: 'medium',
+    message: '页面加载外部脚本，访问者会执行第三方代码。',
+    matched: /<script[^>]+src=["']https?:\/\//i.test(source),
+  });
+  addSecurityFinding(findings, {
+    id: 'external-iframe',
+    severity: 'medium',
+    message: '页面嵌入外部 iframe，可能展示第三方登录或追踪内容。',
+    matched: /<iframe[^>]+src=["']https?:\/\//i.test(source),
+  });
+  addSecurityFinding(findings, {
+    id: 'inline-event-network',
+    severity: 'medium',
+    message: '页面包含点击/加载事件里的外部网络调用。',
+    matched: /\son(?:click|load|submit|error)=["'][^"']*https?:\/\//i.test(source),
+  });
+
+  const highFindings = findings.filter((finding) => finding.severity === 'high');
+  if (highFindings.length > 0) {
+    return {
+      ok: false,
+      findings,
+      error: `内容安全检测未通过：${highFindings.map((finding) => finding.message).join('；')}`,
+    };
+  }
+
+  return {
+    ok: true,
+    findings,
+    codeType,
+  };
+}
+
+function prepareSecurityScanContent(content, codeType) {
+  const source = String(content || '');
+  if (codeType === CODE_TYPES.MARKDOWN) {
+    return source.replace(/```[\s\S]*?```/g, '');
+  }
+  return source;
+}
+
+function addSecurityFinding(findings, finding) {
+  if (!finding.matched) return;
+  findings.push({
+    id: finding.id,
+    severity: finding.severity,
+    message: finding.message,
+  });
+}
+
+function extractZipSecurityScanText(files) {
+  const textDecoder = new TextDecoder();
+  const interestingFilePattern = /\.(html?|js|mjs|css|svg|txt|md)$/i;
+  let result = '';
+
+  for (const [filename, fileData] of Object.entries(files || {})) {
+    if (!interestingFilePattern.test(filename)) continue;
+    if (result.length >= MAX_SECURITY_SCAN_CONTENT_LENGTH) break;
+    const chunk = textDecoder.decode(fileData.slice(0, 64 * 1024));
+    result += `\n\n/* file: ${filename} */\n${chunk}`;
+  }
+
+  return result.slice(0, MAX_SECURITY_SCAN_CONTENT_LENGTH);
+}
+
+function isSecurityScanEnabled(env) {
+  return String(env.SECURITY_SCAN_ENABLED || 'true').toLowerCase() !== 'false';
+}
+
+async function enforceDailyLimit(env, scope, limit) {
+  const normalizedLimit = Number(limit);
+  if (!Number.isFinite(normalizedLimit) || normalizedLimit <= 0) {
+    return {
+      ok: true,
+      unlimited: true,
+      limit: 0,
+      count: 0,
+      remaining: null,
+    };
+  }
+
+  const day = new Date().toISOString().slice(0, 10);
+  const now = Date.now();
+  const existing = await env.DB.prepare('SELECT count FROM daily_usage WHERE scope = ? AND day = ?')
+    .bind(scope, day)
+    .first();
+  const currentCount = Number(existing?.count || 0);
+
+  if (currentCount >= normalizedLimit) {
+    return {
+      ok: false,
+      limit: normalizedLimit,
+      count: currentCount,
+      remaining: 0,
+      day,
+    };
+  }
+
+  if (existing) {
+    await env.DB.prepare('UPDATE daily_usage SET count = ?, updated_at = ? WHERE scope = ? AND day = ?')
+      .bind(currentCount + 1, now, scope, day)
+      .run();
+  } else {
+    await env.DB.prepare('INSERT INTO daily_usage (scope, day, count, updated_at) VALUES (?, ?, ?, ?)')
+      .bind(scope, day, 1, now)
+      .run();
+  }
+
+  return {
+    ok: true,
+    limit: normalizedLimit,
+    count: currentCount + 1,
+    remaining: Math.max(0, normalizedLimit - currentCount - 1),
+    day,
+  };
+}
+
+function dailyLimitResponse(quota, message) {
+  return jsonResponse({
+    success: false,
+    error: message,
+    quota: quotaSummary(quota),
+  }, 429);
+}
+
+function quotaSummary(quota) {
+  if (!quota) return undefined;
+  return {
+    limit: quota.limit,
+    used: quota.count,
+    remaining: quota.remaining,
+    day: quota.day,
+    unlimited: Boolean(quota.unlimited),
+  };
+}
+
+function getDailyCreateLimit(env) {
+  return getPositiveIntegerEnv(env, 'DAILY_CREATE_LIMIT', DEFAULT_DAILY_CREATE_LIMIT, 10000);
+}
+
+function getDailyAgentCreateLimit(env) {
+  return getPositiveIntegerEnv(env, 'DAILY_AGENT_CREATE_LIMIT', DEFAULT_DAILY_AGENT_CREATE_LIMIT, 10000);
+}
+
+function getDailyAiLimit(env) {
+  return getPositiveIntegerEnv(env, 'DAILY_AI_LIMIT', DEFAULT_DAILY_AI_LIMIT, 10000);
+}
+
+function getPositiveIntegerEnv(env, name, defaultValue, maxValue) {
+  const raw = String(env[name] ?? '').trim();
+  if (!raw) return defaultValue;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed)) return defaultValue;
+  if (parsed <= 0) return 0;
+  return Math.min(parsed, maxValue);
 }
 
 async function generateShareMetadata({ env, content, codeType, providedTitle, providedSummary }) {

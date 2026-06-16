@@ -588,6 +588,14 @@ export function renderBootstrapPage(env) {
           <dd>控制 Cloudflare Workers AI 功能。开启后会消耗部署者自己的 Cloudflare 账号额度；关闭后分享页仍可创建，只是智能美化和 AI 标题摘要不可用或改用规则提取。</dd>
         </div>
         <div>
+          <dt>SECURITY_SCAN_ENABLED</dt>
+          <dd>创建分享页前的规则扫描。默认开启，会拦截明显钓鱼、凭据采集、Cookie 外传、自动跳转和高混淆脚本。它是防护栏，不是完整杀毒引擎。</dd>
+        </div>
+        <div>
+          <dt>DAILY_CREATE_LIMIT / DAILY_AGENT_CREATE_LIMIT / DAILY_AI_LIMIT</dt>
+          <dd>每日额度，按 UTC 日期重置。默认网页创建 50 次/访问者、Agent API 200 次/token、智能美化 20 次/访问者；设置为 <code>0</code> 表示不限制。</dd>
+        </div>
+        <div>
           <dt>APP_FOOTER_TEXT / APP_FOOTER_URL</dt>
           <dd>这是可选页脚配置，不需要在首次部署表单里填写。部署完成后，如果你想在页面底部显示品牌、备案号或官网链接，再到 Worker Variables 手动新增即可。</dd>
         </div>

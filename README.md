@@ -94,6 +94,10 @@ PUBLIC_SITE_URL=https://your-share-domain.example
 AI_SHARE_METADATA_ENABLED=true
 AI_SHARE_METADATA_MODEL=@cf/zai-org/glm-4.7-flash
 MAX_SHARE_METADATA_CONTENT_KB=24
+SECURITY_SCAN_ENABLED=true
+DAILY_CREATE_LIMIT=50
+DAILY_AGENT_CREATE_LIMIT=200
+DAILY_AI_LIMIT=20
 ```
 
 `AUTH_ENABLED` 在默认部署配置中已经是 `true`。如果你把它改成 `false`，首页、创建接口、预览和智能美化接口会公开给所有访问者，不建议在生产环境关闭。
@@ -105,12 +109,25 @@ MAX_SHARE_METADATA_CONTENT_KB=24
 goshare 不会要求你的 Cloudflare API Token，也不会把 Worker Secrets 暴露给访问者；但它是一个可以发布 HTML/Markdown/SVG/Mermaid/ZIP 的自托管分享工具，上线前请按下面的方式收紧默认暴露面。
 
 - **保持 `AUTH_ENABLED=true`**：这是生产默认值。关闭后，任何人都能访问首页并创建分享页，可能消耗你的 Workers、R2、D1 和 Workers AI 额度。
+- **需要公开创建入口时保留防护栏**：如果你为了分享便利把 `AUTH_ENABLED=false`，请至少保持 `SECURITY_SCAN_ENABLED=true`，并设置 `DAILY_CREATE_LIMIT`、`DAILY_AGENT_CREATE_LIMIT`、`DAILY_AI_LIMIT`。
+- **内容扫描不是杀毒引擎**：它会拦截明显的钓鱼、凭据采集、Cookie 外传、自动跳转和高混淆脚本，但不能保证识别所有恶意页面。
 - **Secret 不要写进仓库**：`AUTH_PASSWORD`、`COOKIE_SECRET`、`AGENT_API_TOKEN` 必须在 Cloudflare Worker 的 Secrets 里设置。
 - **使用强随机值**：`COOKIE_SECRET` 建议用 `openssl rand -hex 32`；`AGENT_API_TOKEN` 建议用密码管理器生成 32 位以上随机字符串。
 - **使用独立子域名**：建议部署到 `share.example.com`，不要和你的主站、管理后台或业务系统共用同一个域名。
 - **谨慎打开陌生 HTML/ZIP 分享页**：分享内容会在你的分享域名下渲染。陌生内容建议用无痕窗口查看，不要在后台已登录状态下打开。
 - **5 位访问密码只适合临时分享**：不要把它当作强加密或长期保密方案。
 - **Workers AI 会计入部署者账号用量**：不想产生 AI 调用时，把 `AI_ENABLED=false` 或 `AI_SHARE_METADATA_ENABLED=false`。
+
+默认限额：
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `SECURITY_SCAN_ENABLED` | `true` | 创建分享页前扫描高风险 HTML/ZIP/脚本模式 |
+| `DAILY_CREATE_LIMIT` | `50` | 每个访问者每天通过网页创建的分享页数量 |
+| `DAILY_AGENT_CREATE_LIMIT` | `200` | 每个 Agent Token 每天通过 Agent API 创建的分享页数量 |
+| `DAILY_AI_LIMIT` | `20` | 每个访问者每天调用智能美化的次数 |
+
+这些限制按 UTC 日期重置；把限制值设为 `0` 表示关闭对应限额。
 
 ## 用 AI Agent 部署
 
@@ -306,6 +323,8 @@ flowchart LR
 | D1 本地表不存在 | 运行 `npm run db:migrate:local` |
 | 生产 Agent API 返回未配置 | 设置 `AGENT_API_TOKEN` secret |
 | 首页不想公开 | 设置 `AUTH_ENABLED=true` 和 `AUTH_PASSWORD` |
+| 创建返回 429 | 达到每日额度，调大 `DAILY_CREATE_LIMIT` / `DAILY_AGENT_CREATE_LIMIT` / `DAILY_AI_LIMIT` |
+| 创建返回 422 | 内容安全扫描拦截了明显钓鱼、凭据采集、外部跳转或高风险脚本 |
 | 清 Cookie 后后台看不到旧内容 | owner 身份保存在浏览器 cookie；旧分享链接仍可访问 |
 
 ## English

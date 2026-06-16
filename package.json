@@ -67,6 +67,18 @@
       },
       "AI_SHARE_METADATA_ENABLED": {
         "description": "是否启用 AI 生成分享卡片标题和摘要。关闭后会自动从内容里规则提取。"
+      },
+      "SECURITY_SCAN_ENABLED": {
+        "description": "是否启用创建前内容安全扫描。默认 `true`，会拦截明显的钓鱼、凭据采集、Cookie 外传和自动跳转内容。"
+      },
+      "DAILY_CREATE_LIMIT": {
+        "description": "每个访问者每天可通过网页创建的分享页数量。默认 `50`，设置为 `0` 表示不限制。"
+      },
+      "DAILY_AGENT_CREATE_LIMIT": {
+        "description": "每个 Agent Token 每天可通过 Agent API 创建的分享页数量。默认 `200`，设置为 `0` 表示不限制。"
+      },
+      "DAILY_AI_LIMIT": {
+        "description": "每个访问者每天可调用智能美化的次数。默认 `20`，设置为 `0` 表示不限制。"
       }
     }
   }
