@@ -263,6 +263,36 @@ export function renderIndexPage(env) {
         </div>
       </div>
     </div>
+    <div id="result-section" class="card result-card" style="display: none;" aria-live="polite">
+      <h3 class="section-title" style="color: var(--primary); font-family: 'Orbitron', sans-serif; margin-bottom: 1rem;">链接已生成</h3>
+      <div id="result-meta" class="result-meta" style="display: none;"></div>
+      <div class="result-container">
+        <div id="result-url" class="result-url" tabindex="0"></div>
+        <div class="action-buttons">
+          <button id="share-card-button" class="action-btn share-card-btn tooltip micro-interaction" data-tooltip="打开分享卡片" aria-label="打开分享卡片">
+            <i class="fas fa-id-card" aria-hidden="true"></i>
+          </button>
+          <button id="preview-button" class="action-btn preview-btn tooltip micro-interaction" data-tooltip="打开内容页" aria-label="打开内容页">
+            <i class="fas fa-external-link-alt" aria-hidden="true"></i>
+          </button>
+          <button id="copy-button" class="action-btn tooltip micro-interaction" data-tooltip="复制链接" aria-label="复制链接">
+            <i class="fas fa-copy" aria-hidden="true"></i>
+          </button>
+        </div>
+      </div>
+      <div class="password-protection-toggle">
+        <div class="protection-controls">
+          <div class="switch-container">
+            <input type="checkbox" id="password-toggle" class="switch-checkbox">
+            <label for="password-toggle" class="switch-label"></label>
+          </div>
+          <div id="password-info" class="password-info" style="display: none; margin-left: 15px;">
+            <span id="generated-password" class="generated-password" style="display: inline-block; cursor: pointer;" title="点击复制密码"></span>
+            <a href="#" id="copy-password-link" class="copy-password-link" style="display: inline-block; margin-left: 10px;">复制密码和网址</a>
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="card agent-api-entry-card">
       <div class="agent-api-entry-header">
         <div>
@@ -295,36 +325,6 @@ export function renderIndexPage(env) {
         </div>
       </div>
       <iframe id="render-preview-frame" class="render-preview-frame" title="渲染预览" sandbox="allow-scripts"></iframe>
-    </div>
-    <div id="result-section" class="card result-card" style="display: none;" aria-live="polite">
-      <h3 class="section-title" style="color: var(--primary); font-family: 'Orbitron', sans-serif; margin-bottom: 1rem;">链接已生成</h3>
-      <div id="result-meta" class="result-meta" style="display: none;"></div>
-      <div class="result-container">
-        <div id="result-url" class="result-url" tabindex="0"></div>
-        <div class="action-buttons">
-          <button id="share-card-button" class="action-btn share-card-btn tooltip micro-interaction" data-tooltip="打开分享卡片" aria-label="打开分享卡片">
-            <i class="fas fa-id-card" aria-hidden="true"></i>
-          </button>
-          <button id="preview-button" class="action-btn preview-btn tooltip micro-interaction" data-tooltip="打开内容页" aria-label="打开内容页">
-            <i class="fas fa-external-link-alt" aria-hidden="true"></i>
-          </button>
-          <button id="copy-button" class="action-btn tooltip micro-interaction" data-tooltip="复制链接" aria-label="复制链接">
-            <i class="fas fa-copy" aria-hidden="true"></i>
-          </button>
-        </div>
-      </div>
-      <div class="password-protection-toggle">
-        <div class="protection-controls">
-          <div class="switch-container">
-            <input type="checkbox" id="password-toggle" class="switch-checkbox">
-            <label for="password-toggle" class="switch-label"></label>
-          </div>
-          <div id="password-info" class="password-info" style="display: none; margin-left: 15px;">
-            <span id="generated-password" class="generated-password" style="display: inline-block; cursor: pointer;" title="点击复制密码"></span>
-            <a href="#" id="copy-password-link" class="copy-password-link" style="display: inline-block; margin-left: 10px;">复制密码和网址</a>
-          </div>
-        </div>
-      </div>
     </div>
     <div class="card instructions-card">
       <h3 class="instructions-title">
@@ -360,6 +360,9 @@ export function renderLandingPage(env) {
   const deployUrl = buildDeployButtonUrl(config.repoUrl);
   const zhPrompt = `你是我的 goshare Cloudflare 部署向导。目标：把 ${config.repoUrl} 部署到我的 Cloudflare 账号并完成真实冒烟测试。请先读取 README.md、docs/AI_DEPLOY_WORKFLOW.md、docs/AI_DEPLOY_GUIDE.md、wrangler.jsonc、migrations/ 和 package.json，然后严格按 workflow 执行。优先用 Wrangler CLI；每一步先解释目的、资源和费用风险。不要让我在聊天里粘贴 AUTH_PASSWORD、COOKIE_SECRET、AGENT_API_TOKEN。完整部署需要可创建 Workers、R2、D1、Workers AI 的 Cloudflare 账号。部署后交付访问地址、资源清单、Secrets 状态、冒烟测试、安全检查、Agent API 使用包和未完成项。`;
   const enPrompt = `You are my goshare Cloudflare deployment guide. Goal: deploy ${config.repoUrl} to my Cloudflare account and run real smoke tests. First read README.md, docs/AI_DEPLOY_WORKFLOW.md, docs/AI_DEPLOY_GUIDE.md, wrangler.jsonc, migrations/, and package.json, then follow the workflow strictly. Use Wrangler CLI first. Before each step, explain the purpose, resources, and cost risk. Do not ask me to paste AUTH_PASSWORD, COOKIE_SECRET, or AGENT_API_TOKEN into chat. Full deployment requires a Cloudflare account that can create Workers, R2, D1, and Workers AI. Deliver the site URL, resource list, secret status, smoke tests, security checks, Agent API handoff pack, and open items.`;
+  const homeShotUrl = '/assets/goshare-home.png';
+  const generatedShotUrl = '/assets/goshare-generated-link.png';
+  const renderedShotUrl = '/assets/goshare-rendered-page.png';
   const extraHead = `
     <style>
       body[data-page="landing-page"] {
@@ -784,10 +787,489 @@ export function renderLandingPage(env) {
           grid-template-columns: 1fr;
         }
       }
+      body[data-page="landing-page"] {
+        background: #f6f8fb;
+        color: #141827;
+      }
+      body[data-page="landing-page"] #particles-js,
+      body[data-page="landing-page"] .grid-background,
+      body[data-page="landing-page"] .theme-toggle {
+        display: none;
+      }
+      body[data-page="landing-page"] .app-container {
+        background:
+          linear-gradient(90deg, rgba(20, 24, 39, 0.05) 1px, transparent 1px),
+          linear-gradient(180deg, rgba(20, 24, 39, 0.04) 1px, transparent 1px),
+          linear-gradient(135deg, #f6f8fb 0%, #eef7f4 42%, #f7f2ff 100%);
+        background-size: 56px 56px, 56px 56px, auto;
+      }
+      .landing-page-v2 {
+        width: min(1200px, calc(100vw - 36px));
+        padding: 18px 0 76px;
+      }
+      .landing-page-v2 .landing-nav {
+        min-height: 64px;
+        padding: 10px 0;
+        background: rgba(246, 248, 251, 0.86);
+        border-bottom: 1px solid rgba(20, 24, 39, 0.08);
+      }
+      .landing-page-v2 .landing-brand {
+        color: #141827;
+      }
+      .landing-page-v2 .landing-brand img {
+        border: 1px solid rgba(20, 24, 39, 0.1);
+        background: #ffffff;
+      }
+      .landing-page-v2 .landing-lang {
+        border-color: rgba(20, 24, 39, 0.12);
+        background: #ffffff;
+      }
+      .landing-page-v2 .landing-lang button {
+        color: #667085;
+      }
+      .landing-page-v2 .landing-lang button[aria-pressed="true"] {
+        color: #ffffff;
+        background: #141827;
+      }
+      .landing-page-v2 .landing-hero {
+        box-sizing: border-box;
+        min-height: min(600px, calc(100vh - 130px));
+        grid-template-columns: minmax(0, 1fr) minmax(390px, 1fr);
+        align-items: center;
+        gap: clamp(22px, 4vw, 46px);
+        padding: 22px 0 24px;
+      }
+      .landing-page-v2 .landing-kicker {
+        border-color: rgba(15, 118, 110, 0.22);
+        color: #0f766e;
+        background: #ddf7ef;
+      }
+      .landing-page-v2 .landing-title {
+        color: #111827;
+        font-size: clamp(4rem, 9.4vw, 7.4rem);
+        line-height: 0.86;
+        letter-spacing: 0;
+      }
+      .landing-page-v2 .landing-subhead {
+        margin: 14px 0 0;
+        color: #111827;
+        font-size: clamp(1.25rem, 2.6vw, 1.85rem);
+        line-height: 1.18;
+        font-weight: 800;
+        max-width: 760px;
+      }
+      .landing-page-v2 .landing-lede {
+        max-width: 700px;
+        margin-top: 18px;
+        color: #475467;
+        font-size: 1rem;
+        line-height: 1.68;
+      }
+      .landing-page-v2 .landing-button {
+        min-height: 42px;
+        padding: 0 14px;
+        border-color: rgba(20, 24, 39, 0.14);
+        color: #141827;
+        background: #ffffff;
+        box-shadow: 0 10px 24px rgba(20, 24, 39, 0.06);
+        font-size: 0.92rem;
+        white-space: nowrap;
+      }
+      .landing-page-v2 .landing-button.primary {
+        color: #ffffff;
+        background: #111827;
+        box-shadow: 0 18px 34px rgba(17, 24, 39, 0.18);
+      }
+      .landing-page-v2 .landing-button.hot {
+        border-color: rgba(225, 79, 72, 0.24);
+        color: #9f1d1d;
+        background: #fff1ee;
+      }
+      .landing-page-v2 .landing-proof {
+        margin-top: 18px;
+      }
+      .landing-page-v2 .landing-proof span {
+        min-height: 28px;
+        padding: 0 8px;
+        color: #344054;
+        border-color: rgba(20, 24, 39, 0.1);
+        background: rgba(255, 255, 255, 0.76);
+        font-size: 0.78rem;
+      }
+      .landing-browser-stack {
+        position: relative;
+        min-height: 500px;
+      }
+      .landing-screenshot-main,
+      .landing-shot-card,
+      .landing-command-strip {
+        border: 1px solid rgba(20, 24, 39, 0.12);
+        border-radius: 8px;
+        background: #ffffff;
+        box-shadow: 0 22px 60px rgba(20, 24, 39, 0.16);
+        overflow: hidden;
+      }
+      .landing-screenshot-main {
+        position: absolute;
+        inset: 10px 0 auto 28px;
+        width: min(80%, 600px);
+      }
+      .landing-screenshot-main img,
+      .landing-shot-card img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      .landing-shot-card {
+        position: absolute;
+        right: 0;
+        bottom: 108px;
+        width: min(38%, 260px);
+      }
+      .landing-shot-card figcaption,
+      .landing-screenshot-main figcaption {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 38px;
+        padding: 0 12px;
+        color: #344054;
+        border-top: 1px solid rgba(20, 24, 39, 0.08);
+        font-size: 0.84rem;
+        font-weight: 700;
+      }
+      .landing-command-strip {
+        position: absolute;
+        left: 0;
+        right: 92px;
+        bottom: 0;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0;
+      }
+      .landing-command-step {
+        min-height: 92px;
+        padding: 14px;
+        border-right: 1px solid rgba(20, 24, 39, 0.08);
+        background: #ffffff;
+      }
+      .landing-command-step:last-child {
+        border-right: 0;
+      }
+      .landing-command-step b {
+        display: block;
+        color: #111827;
+        margin-bottom: 5px;
+      }
+      .landing-command-step small {
+        color: #667085;
+        line-height: 1.45;
+      }
+      .landing-page-v2 .landing-section {
+        padding-top: 76px;
+      }
+      .landing-page-v2 .landing-section-head h2 {
+        color: #111827;
+      }
+      .landing-page-v2 .landing-section-head p {
+        color: #475467;
+      }
+      .landing-page-v2 .landing-card,
+      .landing-page-v2 .landing-loop-item,
+      .landing-showcase-item {
+        border-color: rgba(20, 24, 39, 0.1);
+        background: rgba(255, 255, 255, 0.78);
+        box-shadow: 0 14px 34px rgba(20, 24, 39, 0.06);
+      }
+      .landing-page-v2 .landing-card h3,
+      .landing-page-v2 .landing-loop-item h3,
+      .landing-showcase-item h3 {
+        color: #111827;
+      }
+      .landing-page-v2 .landing-card p,
+      .landing-page-v2 .landing-loop-item p,
+      .landing-showcase-item p {
+        color: #475467;
+      }
+      .landing-page-v2 .landing-card i {
+        color: #0f766e;
+      }
+      .landing-page-v2 .landing-loop-number {
+        color: #ffffff;
+        background: #111827;
+      }
+      .landing-showcase-grid {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 16px;
+        align-items: stretch;
+      }
+      .landing-showcase-item {
+        border: 1px solid rgba(20, 24, 39, 0.1);
+        border-radius: 8px;
+        padding: 14px;
+        overflow: hidden;
+      }
+      .landing-showcase-item.wide {
+        grid-row: span 2;
+      }
+      .landing-showcase-item img {
+        width: 100%;
+        aspect-ratio: 16 / 10;
+        object-fit: cover;
+        object-position: top;
+        border-radius: 6px;
+        border: 1px solid rgba(20, 24, 39, 0.08);
+        background: #ffffff;
+      }
+      .landing-showcase-item.wide img {
+        aspect-ratio: 16 / 11;
+      }
+      .landing-showcase-item h3 {
+        margin: 14px 0 6px;
+        font-size: 1rem;
+      }
+      .landing-showcase-item p {
+        margin: 0;
+        line-height: 1.65;
+      }
+      .landing-page-v2 .landing-prompt-panel {
+        border-color: rgba(17, 24, 39, 0.14);
+        background: #111827;
+        box-shadow: 0 24px 60px rgba(17, 24, 39, 0.18);
+      }
+      .landing-page-v2 .landing-prompt {
+        border-color: rgba(255, 255, 255, 0.12);
+        color: #e5e7eb;
+        background: #070b14;
+      }
+      .landing-page-v2 .landing-prompt-side p {
+        color: #d0d5dd;
+      }
+      .landing-page-v2 .landing-prompt-panel .landing-button {
+        background: #ffffff;
+        color: #111827;
+      }
+      .landing-page-v2 .landing-prompt-panel .landing-button.primary {
+        background: #14b8a6;
+        color: #ffffff;
+      }
+      .landing-page-v2 .landing-footer-cta {
+        border-color: rgba(20, 24, 39, 0.1);
+        background: #ffffff;
+        box-shadow: 0 18px 46px rgba(20, 24, 39, 0.08);
+      }
+      .landing-page-v2 .landing-footer-cta h2 {
+        color: #111827;
+      }
+      .landing-page-v2 .landing-footer-cta p {
+        color: #475467;
+      }
+      @media (max-width: 980px) {
+        .landing-page-v2 .landing-hero,
+        .landing-showcase-grid {
+          grid-template-columns: 1fr;
+        }
+        .landing-browser-stack {
+          min-height: 610px;
+        }
+        .landing-screenshot-main {
+          left: 0;
+          width: 86%;
+        }
+        .landing-shot-card {
+          width: 42%;
+        }
+      }
+      @media (max-width: 640px) {
+        .landing-page-v2 {
+          width: min(100% - 24px, 1200px);
+        }
+        .landing-page-v2 .landing-nav {
+          align-items: center;
+        }
+        .landing-page-v2 .landing-nav-actions {
+          width: auto;
+          justify-content: flex-end;
+        }
+        .landing-page-v2 .landing-nav-actions > .landing-button {
+          display: none;
+        }
+        .landing-page-v2 .landing-hero {
+          min-height: calc(100vh - 132px);
+          gap: 18px;
+          padding: 16px 0 18px;
+        }
+        .landing-page-v2 .landing-title {
+          font-size: clamp(3.35rem, 21vw, 4.7rem);
+        }
+        .landing-page-v2 .landing-subhead {
+          font-size: 1.18rem;
+        }
+        .landing-page-v2 .landing-lede,
+        .landing-page-v2 .landing-proof {
+          display: none;
+        }
+        .landing-page-v2 .landing-actions {
+          gap: 8px;
+          margin-top: 18px;
+        }
+        .landing-page-v2 .landing-actions .landing-button {
+          width: 100%;
+          min-height: 40px;
+        }
+        .landing-browser-stack {
+          min-height: 228px;
+          width: 100%;
+        }
+        .landing-screenshot-main {
+          position: relative;
+          inset: auto;
+          width: 100%;
+        }
+        .landing-screenshot-main img {
+          height: 176px;
+          object-fit: cover;
+          object-position: top;
+        }
+        .landing-shot-card {
+          display: none;
+        }
+        .landing-command-strip {
+          display: none;
+        }
+      }
+      html[data-page="landing-page"] body {
+        min-height: 100vh;
+      }
+      html[data-page="landing-page"] .content-container {
+        padding: 0;
+      }
+      html[data-page="landing-page"] .grid-background,
+      html[data-page="landing-page"] #particles-js,
+      html[data-page="landing-page"] .theme-toggle {
+        display: none;
+      }
+      html[data-theme="light"][data-page="landing-page"] body {
+        background: #f6f8fb;
+        color: #141827;
+        color-scheme: light;
+      }
+      html[data-theme="light"][data-page="landing-page"] .app-container {
+        background:
+          linear-gradient(90deg, rgba(20, 24, 39, 0.05) 1px, transparent 1px),
+          linear-gradient(180deg, rgba(20, 24, 39, 0.04) 1px, transparent 1px),
+          linear-gradient(135deg, #f6f8fb 0%, #eef7f4 42%, #f7f2ff 100%);
+        background-size: 56px 56px, 56px 56px, auto;
+      }
+      html[data-theme="dark"][data-page="landing-page"] body {
+        background: #070b14;
+        color: #f8fafc;
+        color-scheme: dark;
+      }
+      html[data-theme="dark"][data-page="landing-page"] .app-container {
+        background:
+          linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+          linear-gradient(180deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+          radial-gradient(circle at 12% 8%, rgba(20, 184, 166, 0.18), transparent 28%),
+          radial-gradient(circle at 86% 12%, rgba(99, 102, 241, 0.2), transparent 30%),
+          linear-gradient(135deg, #070b14 0%, #0f172a 52%, #111827 100%);
+        background-size: 56px 56px, 56px 56px, auto, auto, auto;
+      }
+      html[data-theme="dark"][data-page="landing-page"] .grid-background,
+      html[data-theme="dark"][data-page="landing-page"] #particles-js,
+      html[data-theme="dark"][data-page="landing-page"] .theme-toggle {
+        display: none;
+      }
+      html[data-theme="dark"][data-page="landing-page"] .landing-page-v2 .landing-nav {
+        background: rgba(7, 11, 20, 0.86);
+        border-bottom-color: rgba(148, 163, 184, 0.18);
+      }
+      html[data-theme="dark"][data-page="landing-page"] .landing-page-v2 .landing-brand,
+      html[data-theme="dark"][data-page="landing-page"] .landing-page-v2 .landing-title,
+      html[data-theme="dark"][data-page="landing-page"] .landing-page-v2 .landing-subhead,
+      html[data-theme="dark"][data-page="landing-page"] .landing-page-v2 .landing-section-head h2,
+      html[data-theme="dark"][data-page="landing-page"] .landing-page-v2 .landing-card h3,
+      html[data-theme="dark"][data-page="landing-page"] .landing-page-v2 .landing-loop-item h3,
+      html[data-theme="dark"][data-page="landing-page"] .landing-showcase-item h3,
+      html[data-theme="dark"][data-page="landing-page"] .landing-page-v2 .landing-footer-cta h2 {
+        color: #f8fafc;
+      }
+      html[data-theme="dark"][data-page="landing-page"] .landing-page-v2 .landing-lede,
+      html[data-theme="dark"][data-page="landing-page"] .landing-page-v2 .landing-section-head p,
+      html[data-theme="dark"][data-page="landing-page"] .landing-page-v2 .landing-card p,
+      html[data-theme="dark"][data-page="landing-page"] .landing-page-v2 .landing-loop-item p,
+      html[data-theme="dark"][data-page="landing-page"] .landing-showcase-item p,
+      html[data-theme="dark"][data-page="landing-page"] .landing-page-v2 .landing-footer-cta p {
+        color: #cbd5e1;
+      }
+      html[data-theme="dark"][data-page="landing-page"] .landing-page-v2 .landing-kicker {
+        border-color: rgba(45, 212, 191, 0.32);
+        color: #99f6e4;
+        background: rgba(20, 184, 166, 0.16);
+      }
+      html[data-theme="dark"][data-page="landing-page"] .landing-page-v2 .landing-lang,
+      html[data-theme="dark"][data-page="landing-page"] .landing-page-v2 .landing-button,
+      html[data-theme="dark"][data-page="landing-page"] .landing-page-v2 .landing-proof span {
+        border-color: rgba(148, 163, 184, 0.24);
+        color: #f8fafc;
+        background: rgba(15, 23, 42, 0.82);
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+      }
+      html[data-theme="dark"][data-page="landing-page"] .landing-page-v2 .landing-lang button {
+        color: #cbd5e1;
+      }
+      html[data-theme="dark"][data-page="landing-page"] .landing-page-v2 .landing-lang button[aria-pressed="true"] {
+        color: #070b14;
+        background: #f8fafc;
+      }
+      html[data-theme="dark"][data-page="landing-page"] .landing-page-v2 .landing-button.primary {
+        color: #06121f;
+        background: #5eead4;
+        box-shadow: 0 18px 34px rgba(45, 212, 191, 0.24);
+      }
+      html[data-theme="dark"][data-page="landing-page"] .landing-page-v2 .landing-button.hot {
+        border-color: rgba(251, 113, 133, 0.34);
+        color: #fecdd3;
+        background: rgba(127, 29, 29, 0.3);
+      }
+      html[data-theme="dark"][data-page="landing-page"] .landing-page-v2 .landing-brand img,
+      html[data-theme="dark"][data-page="landing-page"] .landing-screenshot-main,
+      html[data-theme="dark"][data-page="landing-page"] .landing-shot-card,
+      html[data-theme="dark"][data-page="landing-page"] .landing-command-strip,
+      html[data-theme="dark"][data-page="landing-page"] .landing-page-v2 .landing-card,
+      html[data-theme="dark"][data-page="landing-page"] .landing-page-v2 .landing-loop-item,
+      html[data-theme="dark"][data-page="landing-page"] .landing-showcase-item,
+      html[data-theme="dark"][data-page="landing-page"] .landing-page-v2 .landing-footer-cta {
+        border-color: rgba(148, 163, 184, 0.22);
+        background: rgba(15, 23, 42, 0.84);
+        box-shadow: 0 20px 54px rgba(0, 0, 0, 0.34);
+      }
+      html[data-theme="dark"][data-page="landing-page"] .landing-command-step {
+        border-right-color: rgba(148, 163, 184, 0.18);
+        background: rgba(15, 23, 42, 0.9);
+      }
+      html[data-theme="dark"][data-page="landing-page"] .landing-command-step b,
+      html[data-theme="dark"][data-page="landing-page"] .landing-shot-card figcaption,
+      html[data-theme="dark"][data-page="landing-page"] .landing-screenshot-main figcaption {
+        color: #f8fafc;
+      }
+      html[data-theme="dark"][data-page="landing-page"] .landing-command-step small {
+        color: #cbd5e1;
+      }
+      html[data-theme="dark"][data-page="landing-page"] .landing-shot-card figcaption,
+      html[data-theme="dark"][data-page="landing-page"] .landing-screenshot-main figcaption {
+        border-top-color: rgba(148, 163, 184, 0.18);
+        background: rgba(15, 23, 42, 0.94);
+      }
+      html[data-theme="dark"][data-page="landing-page"] .landing-showcase-item img {
+        border-color: rgba(148, 163, 184, 0.18);
+        background: #0f172a;
+      }
     </style>`;
 
   return `${chromeStart(`${config.appName} | GitHub repo launch`, { htmlAttrs: 'lang="zh-CN" data-page="landing-page"', extraHead, env, defaultOg: true })}
-<main class="landing-shell">
+<main class="landing-shell landing-page-v2">
   <nav class="landing-nav" aria-label="Landing navigation">
     <a class="landing-brand" href="/">
       <img src="${escapeHtml(config.logoUrl)}" alt="${escapeHtml(config.appName)} logo">
@@ -810,7 +1292,8 @@ export function renderLandingPage(env) {
         <i class="fas fa-seedling" aria-hidden="true"></i>
         <span data-i18n="kicker">AI 时代的自举式开源分发</span>
       </div>
-      <h1 class="landing-title" data-i18n-html="heroTitle">把一次 AI 输出，变成会传播的 <span>goshare</span> 站点</h1>
+      <h1 class="landing-title" data-i18n-html="heroTitle">goshare</h1>
+      <p class="landing-subhead" data-i18n="heroSubhead">让 AI 输出拥有自己的链接、部署和传播路径。</p>
       <p class="landing-lede" data-i18n="heroLede">goshare 把 HTML、Markdown、SVG、Mermaid 和静态 ZIP 变成你自己 Cloudflare 账号里的分享页。更重要的是，repo 自带 AI 部署 workflow，让用户复制一句 Prompt 就能完成部署、测试和再分发。</p>
       <div class="landing-actions">
         <button class="landing-button primary" type="button" data-copy-landing-prompt>
@@ -830,26 +1313,20 @@ export function renderLandingPage(env) {
         <span><i class="fas fa-shield-alt" aria-hidden="true"></i><span data-i18n="proofSecurity">安全自检 workflow</span></span>
       </div>
     </div>
-    <div class="landing-visual" aria-label="goshare distribution system">
-      <div class="landing-visual-inner">
-        <div class="landing-window">
-          <div class="landing-window-bar">
-            <span class="landing-dot"></span><span class="landing-dot"></span><span class="landing-dot"></span>
-          </div>
-          <pre class="landing-code"><strong>$</strong> git clone ${escapeHtml(config.repoUrl)}
-<strong>$</strong> npm install
-<strong>$</strong> npx wrangler login
-<strong>$</strong> npx wrangler deploy</pre>
-        </div>
-        <div class="landing-logo-stage">
-          <img src="${escapeHtml(config.logoUrl)}" alt="${escapeHtml(config.appName)} logo">
-        </div>
-        <div class="landing-flow">
-          <div class="landing-flow-step"><b data-i18n="flow1Title">Prompt</b><small data-i18n="flow1Text">用户复制一句话给 AI</small></div>
-          <div class="landing-flow-step"><b data-i18n="flow2Title">CLI</b><small data-i18n="flow2Text">AI 自动执行部署</small></div>
-          <div class="landing-flow-step"><b data-i18n="flow3Title">Share</b><small data-i18n="flow3Text">生成自己的分享站</small></div>
-          <div class="landing-flow-step"><b data-i18n="flow4Title">Fork</b><small data-i18n="flow4Text">从站点回流到 repo</small></div>
-        </div>
+    <div class="landing-browser-stack" aria-label="goshare product preview">
+      <figure class="landing-screenshot-main">
+        <img src="${escapeHtml(homeShotUrl)}" alt="goshare creation screen">
+        <figcaption><i class="fas fa-magic" aria-hidden="true"></i><span data-i18n="shotHome">粘贴 AI 输出，预览后生成分享页</span></figcaption>
+      </figure>
+      <figure class="landing-shot-card">
+        <img src="${escapeHtml(generatedShotUrl)}" alt="goshare generated link screen">
+        <figcaption><i class="fas fa-link" aria-hidden="true"></i><span data-i18n="shotLink">生成可转发链接</span></figcaption>
+      </figure>
+      <div class="landing-command-strip" aria-label="Distribution loop">
+        <div class="landing-command-step"><b data-i18n="flow1Title">Prompt</b><small data-i18n="flow1Text">用户复制一句话给 AI</small></div>
+        <div class="landing-command-step"><b data-i18n="flow2Title">Deploy</b><small data-i18n="flow2Text">AI 自动执行部署</small></div>
+        <div class="landing-command-step"><b data-i18n="flow3Title">Share</b><small data-i18n="flow3Text">生成自己的分享站</small></div>
+        <div class="landing-command-step"><b data-i18n="flow4Title">Fork</b><small data-i18n="flow4Text">从站点回流到 repo</small></div>
       </div>
     </div>
   </section>
@@ -874,6 +1351,30 @@ export function renderLandingPage(env) {
         <i class="fas fa-lock" aria-hidden="true"></i>
         <h3 data-i18n="card3Title">安全先讲清楚</h3>
         <p data-i18n="card3Text">默认登录保护、内容扫描、每日额度和 secret 规则都写入部署流程，降低开源自部署的不确定性。</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="landing-section">
+    <div class="landing-section-head">
+      <h2 data-i18n="showcaseTitle">从一个页面，到一个可复制的分发系统</h2>
+      <p data-i18n="showcaseText">落地页要让访客马上看懂产品本身、生成后的分享结果，以及为什么这个 repo 能被下一位用户继续部署。</p>
+    </div>
+    <div class="landing-showcase-grid">
+      <article class="landing-showcase-item wide">
+        <img src="${escapeHtml(homeShotUrl)}" alt="goshare input and preview interface">
+        <h3 data-i18n="showcase1Title">创建入口清楚</h3>
+        <p data-i18n="showcase1Text">HTML、Markdown、SVG、Mermaid 和 ZIP 都从一个输入面板进入，用户知道第一步该做什么。</p>
+      </article>
+      <article class="landing-showcase-item">
+        <img src="${escapeHtml(generatedShotUrl)}" alt="goshare generated share link">
+        <h3 data-i18n="showcase2Title">分享动作前置</h3>
+        <p data-i18n="showcase2Text">生成后的链接、卡片和复制按钮直接推动内容转发。</p>
+      </article>
+      <article class="landing-showcase-item">
+        <img src="${escapeHtml(renderedShotUrl)}" alt="goshare rendered page">
+        <h3 data-i18n="showcase3Title">内容本身可交付</h3>
+        <p data-i18n="showcase3Text">正文页保留为可访问结果，而不是只停在聊天窗口或本地文件。</p>
       </article>
     </div>
   </section>
@@ -936,15 +1437,18 @@ export function renderLandingPage(env) {
     zh: {
       navRepo: 'GitHub 仓库',
       kicker: 'AI 时代的自举式开源分发',
-      heroTitle: '把一次 AI 输出，变成会传播的 <span>goshare</span> 站点',
+      heroTitle: 'goshare',
+      heroSubhead: '让 AI 输出拥有自己的链接、部署和传播路径。',
       heroLede: 'goshare 把 HTML、Markdown、SVG、Mermaid 和静态 ZIP 变成你自己 Cloudflare 账号里的分享页。更重要的是，repo 自带 AI 部署 workflow，让用户复制一句 Prompt 就能完成部署、测试和再分发。',
       copyPrompt: '复制 AI 部署 Prompt',
       starRepo: 'Star / Fork Repo',
       openBootstrap: '打开自部署引导',
       proofSecurity: '安全自检 workflow',
+      shotHome: '粘贴 AI 输出，预览后生成分享页',
+      shotLink: '生成可转发链接',
       flow1Title: 'Prompt',
       flow1Text: '用户复制一句话给 AI',
-      flow2Title: 'CLI',
+      flow2Title: 'Deploy',
       flow2Text: 'AI 自动执行部署',
       flow3Title: 'Share',
       flow3Text: '生成自己的分享站',
@@ -958,6 +1462,14 @@ export function renderLandingPage(env) {
       card2Text: '每个部署者都能拥有自己的分享域名、H5 分享卡片和 Agent API，内容可以继续带来新用户。',
       card3Title: '安全先讲清楚',
       card3Text: '默认登录保护、内容扫描、每日额度和 secret 规则都写入部署流程，降低开源自部署的不确定性。',
+      showcaseTitle: '从一个页面，到一个可复制的分发系统',
+      showcaseText: '落地页要让访客马上看懂产品本身、生成后的分享结果，以及为什么这个 repo 能被下一位用户继续部署。',
+      showcase1Title: '创建入口清楚',
+      showcase1Text: 'HTML、Markdown、SVG、Mermaid 和 ZIP 都从一个输入面板进入，用户知道第一步该做什么。',
+      showcase2Title: '分享动作前置',
+      showcase2Text: '生成后的链接、卡片和复制按钮直接推动内容转发。',
+      showcase3Title: '内容本身可交付',
+      showcase3Text: '正文页保留为可访问结果，而不是只停在聊天窗口或本地文件。',
       loopTitle: 'repo 自举裂变回路',
       loopText: '落地页的任务不是解释所有功能，而是让访客立刻理解：复制 Prompt，交给 AI，部署自己的 goshare，然后把自己的分享页继续发出去。',
       loop1Title: '看到用法',
@@ -979,15 +1491,18 @@ export function renderLandingPage(env) {
     en: {
       navRepo: 'GitHub Repo',
       kicker: 'Self-bootstrapping open source distribution for AI users',
-      heroTitle: 'Turn one AI output into a <span>goshare</span> site that spreads',
+      heroTitle: 'goshare',
+      heroSubhead: 'Give AI output its own link, deployment path, and distribution loop.',
       heroLede: 'goshare turns HTML, Markdown, SVG, Mermaid, and static ZIP output into shareable pages on your own Cloudflare account. The repo ships with an AI deployment workflow, so users can copy one prompt and let an agent deploy, test, and redistribute it.',
       copyPrompt: 'Copy AI Deploy Prompt',
       starRepo: 'Star / Fork Repo',
       openBootstrap: 'Open Bootstrap Guide',
       proofSecurity: 'Security self-check workflow',
+      shotHome: 'Paste AI output, preview, then publish',
+      shotLink: 'Generate a shareable link',
       flow1Title: 'Prompt',
       flow1Text: 'User gives one prompt to an agent',
-      flow2Title: 'CLI',
+      flow2Title: 'Deploy',
       flow2Text: 'AI runs the deployment flow',
       flow3Title: 'Share',
       flow3Text: 'A personal share station goes live',
@@ -1001,6 +1516,14 @@ export function renderLandingPage(env) {
       card2Text: 'Each deployer gets a domain, H5-style share cards, and an Agent API. Shared content can bring the next user back.',
       card3Title: 'Security is explained first',
       card3Text: 'Login protection, content scanning, daily limits, and secret handling are built into the deployment flow to reduce self-hosting ambiguity.',
+      showcaseTitle: 'From one page to a repeatable distribution system',
+      showcaseText: 'The page should make the product, the generated share result, and the next-user deployment path obvious at a glance.',
+      showcase1Title: 'A clear creation entry',
+      showcase1Text: 'HTML, Markdown, SVG, Mermaid, and ZIP all start from one input surface, so the first action is obvious.',
+      showcase2Title: 'Sharing comes forward',
+      showcase2Text: 'The generated link, card action, and copy control push the content toward redistribution.',
+      showcase3Title: 'The output is deliverable',
+      showcase3Text: 'The rendered page becomes a durable result instead of staying inside chat or a local file.',
       loopTitle: 'The repo self-bootstrapping loop',
       loopText: 'The landing page should not explain every feature. It should make one action obvious: copy the prompt, let AI deploy, own a goshare instance, then share from it.',
       loop1Title: 'See the use case',
