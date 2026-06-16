@@ -358,8 +358,8 @@ ${chromeEnd({ includeMain: true, includeAdminLink: true })}`;
 export function renderLandingPage(env) {
   const config = getAppConfig(env);
   const deployUrl = buildDeployButtonUrl(config.repoUrl);
-  const zhPrompt = `你是我的 goshare Cloudflare 部署向导。请从 ${config.repoUrl} 获取源码，优先使用 Wrangler CLI 自动化部署到我的 Cloudflare 账号。请先读取 README.md、docs/AI_DEPLOY_WORKFLOW.md、docs/AI_DEPLOY_GUIDE.md、wrangler.jsonc、migrations/ 和 package.json。每一步先解释这是什么、为什么要做、会创建什么资源和可能产生什么费用。完整部署需要已完成验证/绑卡准备的 Cloudflare 账号，并能创建 Workers、R2、D1 和 Workers AI。不要让我把 AUTH_PASSWORD、COOKIE_SECRET、AGENT_API_TOKEN 发到聊天里；需要 secret 时引导我在终端输入。部署后记录 Worker URL、PUBLIC_SITE_URL、D1、R2、Secrets 状态，并完成登录、创建 Markdown、分享卡片、正文页、/bootstrap、/landing 和 /api/agent/pages 冒烟测试。最后交付 Agent API 使用包：endpoint、Bearer Token 设置状态、curl 模板、返回字段说明、错误处理和 DAILY_AGENT_CREATE_LIMIT，方便 AI agent 不经过 UI 直接创建分享页。`;
-  const enPrompt = `You are my goshare Cloudflare deployment guide. Fetch the source from ${config.repoUrl} and deploy it to my Cloudflare account with Wrangler CLI first. Read README.md, docs/AI_DEPLOY_WORKFLOW.md, docs/AI_DEPLOY_GUIDE.md, wrangler.jsonc, migrations/, and package.json before acting. Before each step, explain what it is, why it matters, what resource it creates, and what may cost money. A full deployment requires a verified and billing-ready Cloudflare account that can create Workers, R2, D1, and Workers AI. Do not ask me to paste AUTH_PASSWORD, COOKIE_SECRET, or AGENT_API_TOKEN into chat; guide me to enter secrets in the terminal. After deployment, record Worker URL, PUBLIC_SITE_URL, D1, R2, secret status, and run smoke tests for login, Markdown creation, share card, content page, /bootstrap, /landing, and /api/agent/pages. Finally deliver an Agent API handoff pack: endpoint, Bearer Token setup status, curl template, response fields, error handling, and DAILY_AGENT_CREATE_LIMIT so AI agents can create share pages directly without the UI.`;
+  const zhPrompt = `你是我的 goshare Cloudflare 部署向导。目标：把 ${config.repoUrl} 部署到我的 Cloudflare 账号并完成真实冒烟测试。请先读取 README.md、docs/AI_DEPLOY_WORKFLOW.md、docs/AI_DEPLOY_GUIDE.md、wrangler.jsonc、migrations/ 和 package.json，然后严格按 workflow 执行。优先用 Wrangler CLI；每一步先解释目的、资源和费用风险。不要让我在聊天里粘贴 AUTH_PASSWORD、COOKIE_SECRET、AGENT_API_TOKEN。完整部署需要可创建 Workers、R2、D1、Workers AI 的 Cloudflare 账号。部署后交付访问地址、资源清单、Secrets 状态、冒烟测试、安全检查、Agent API 使用包和未完成项。`;
+  const enPrompt = `You are my goshare Cloudflare deployment guide. Goal: deploy ${config.repoUrl} to my Cloudflare account and run real smoke tests. First read README.md, docs/AI_DEPLOY_WORKFLOW.md, docs/AI_DEPLOY_GUIDE.md, wrangler.jsonc, migrations/, and package.json, then follow the workflow strictly. Use Wrangler CLI first. Before each step, explain the purpose, resources, and cost risk. Do not ask me to paste AUTH_PASSWORD, COOKIE_SECRET, or AGENT_API_TOKEN into chat. Full deployment requires a Cloudflare account that can create Workers, R2, D1, and Workers AI. Deliver the site URL, resource list, secret status, smoke tests, security checks, Agent API handoff pack, and open items.`;
   const extraHead = `
     <style>
       body[data-page="landing-page"] {
@@ -1256,7 +1256,7 @@ export function renderBootstrapPage(env) {
         }
       }
     </style>`;
-  const starterPrompt = `请作为我的 ${config.appName} Cloudflare 部署向导，逐步检查并引导我完成生产部署。源码仓库是 ${config.repoUrl}，目标站点域名是 ${displaySiteUrl}。请按顺序确认 Worker、Static Assets、R2、D1、远端 migrations、AUTH_PASSWORD、COOKIE_SECRET、AGENT_API_TOKEN、APP_LOGO_URL、PUBLIC_SITE_URL、自定义域名、/bootstrap、/landing 和 /api/agent/pages 冒烟测试。每一步先告诉我目的和风险，再给我需要执行的命令或 Cloudflare 控制台操作。部署完成后请交付 Agent API 使用包：endpoint、Bearer Token 设置状态、curl 模板、返回字段说明、错误处理和 DAILY_AGENT_CREATE_LIMIT，方便 AI agent 不经过 UI 直接创建分享页。`;
+  const starterPrompt = `请作为我的 ${config.appName} Cloudflare 部署向导。目标：把 ${config.repoUrl} 部署到我的 Cloudflare 账号，站点地址为 ${displaySiteUrl}。请先读取 README.md、docs/AI_DEPLOY_WORKFLOW.md、docs/AI_DEPLOY_GUIDE.md、wrangler.jsonc、migrations/ 和 package.json，然后严格按 workflow 执行。优先用 Wrangler CLI；每一步先解释目的、资源和费用风险。不要让我在聊天里粘贴 AUTH_PASSWORD、COOKIE_SECRET、AGENT_API_TOKEN。部署后交付访问地址、资源清单、Secrets 状态、冒烟测试、安全检查、Agent API 使用包和未完成项。`;
 
   return `${chromeStart(`${config.appName} | 自部署引导`, { htmlAttrs: 'lang="zh-CN" data-page="bootstrap-page"', extraHead, env })}
 <main class="bootstrap-shell">
@@ -1422,7 +1422,7 @@ ${appFooter(env)}
       const aiText = aiInput.checked ? '启用 Workers AI 美化功能' : '先不启用 AI 美化功能';
       const authText = authInput.checked ? '开启后台访问密码' : '首页暂时不加后台密码';
       const logoText = logoUrl ? '自定义 logo 地址是 ' + logoUrl + '，' : '';
-      promptInput.value = '请作为我的 ' + name + ' Cloudflare 部署向导，逐步检查并引导我完成生产部署。源码仓库是 ' + repoUrl + '，目标站点域名是 ' + domain + '。' + logoText + '请按顺序确认 Worker、Static Assets、R2、D1、远端 migrations、' + authText + '、' + aiText + '、AUTH_PASSWORD、COOKIE_SECRET、AGENT_API_TOKEN、APP_LOGO_URL、PUBLIC_SITE_URL、自定义域名、/bootstrap、/landing 和 /api/agent/pages 冒烟测试。每一步先告诉我目的和风险，再给我需要执行的命令或 Cloudflare 控制台操作。部署完成后请交付 Agent API 使用包：endpoint、Bearer Token 设置状态、curl 模板、返回字段说明、错误处理和 DAILY_AGENT_CREATE_LIMIT，方便 AI agent 不经过 UI 直接创建分享页。';
+      promptInput.value = '请作为我的 ' + name + ' Cloudflare 部署向导。目标：把 ' + repoUrl + ' 部署到我的 Cloudflare 账号，站点地址为 ' + domain + '。' + logoText + '请先读取 README.md、docs/AI_DEPLOY_WORKFLOW.md、docs/AI_DEPLOY_GUIDE.md、wrangler.jsonc、migrations/ 和 package.json，然后严格按 workflow 执行。优先用 Wrangler CLI；每一步先解释目的、资源和费用风险。不要让我在聊天里粘贴 AUTH_PASSWORD、COOKIE_SECRET、AGENT_API_TOKEN。部署后交付访问地址、资源清单、Secrets 状态、冒烟测试、安全检查、Agent API 使用包和未完成项。';
       if (logoPreview && logoUrl) logoPreview.src = logoUrl;
     }
 

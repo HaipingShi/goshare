@@ -5,6 +5,7 @@
 ## 执行原则
 
 - 先读 `README.md`、`docs/AI_DEPLOY_WORKFLOW.md`、`docs/AI_DEPLOY_GUIDE.md`、`wrangler.jsonc`、`migrations/`、`package.json`。
+- 部署入口 Prompt 应保持短；具体规则以本 workflow 和 `docs/AI_DEPLOY_GUIDE.md` 为准，不要要求用户复制超长提示词。
 - 每个阶段先向用户说明目的、会创建的资源、可能产生的费用或风险。
 - 不要求用户把 `AUTH_PASSWORD`、`COOKIE_SECRET`、`AGENT_API_TOKEN` 粘贴到聊天里。
 - 不提交真实 `database_id`、密码、token 或 Cloudflare 账号敏感信息。

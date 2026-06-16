@@ -49,41 +49,18 @@ goshare 做一件事：把这些内容放进你自己的 Cloudflare R2/D1/Worker
 第一次部署不用先懂 Cloudflare。建议先复制下面这段给 Codex、Claude Code 或其他 AI coding agent，让它先按 workflow 执行，再用 guide 解释和排错。
 
 ```text
-你是我的 goshare Cloudflare 部署向导。目标：把 https://github.com/HaipingShi/goshare 部署到我的 Cloudflare 账号，并完成一次真实冒烟测试。
+你是我的 goshare Cloudflare 部署向导。
 
-请先读取并严格使用这些文件，不要只凭记忆操作：
-1. README.md：项目概览、变量说明、安全提示。
-2. docs/AI_DEPLOY_WORKFLOW.md：必须优先执行的部署 workflow，包含阶段、检查点、用户确认点和产出物。
-3. docs/AI_DEPLOY_GUIDE.md：每一步的解释、Cloudflare 新手说明、排错和部署记录模板。
-4. wrangler.jsonc：Worker、Static Assets、D1、R2、Workers AI 的绑定配置。
-5. migrations/：需要应用到 Cloudflare D1 的数据库迁移。
-6. package.json：可用脚本和 Wrangler 命令。
+目标：把 https://github.com/HaipingShi/goshare 部署到我的 Cloudflare 账号，并完成真实冒烟测试。
 
-工作方式：
-- 每一步先用一句话解释“这是什么、为什么要做、会创建什么资源或可能产生什么费用”，再给我命令或页面操作。
-- 如果我没有 Cloudflare 账号，先用普通话解释 Cloudflare 是什么：它是运行 Worker、数据库 D1、文件存储 R2 和 Workers AI 的云平台；然后引导我注册、登录，并完成账号验证/绑卡准备。
-- 优先用 Wrangler CLI 自动化部署，不要一开始就让我打开 GitHub 的 Deploy Button 页面。只有我没有本地 Node.js/终端环境，或 CLI 失败时，才把 Deploy Button 作为备选。
-- 如果我没有 GitHub 账号，直接从公开仓库 clone 或下载源码部署，不要求我先 fork。
-- 如果 Cloudflare 提示 R2、D1 或 Workers AI 需要绑卡/升级账号，先停止部署并引导我完成 Cloudflare 账号准备；不要把关闭能力当作完整部署成功。
-- 如果我没有域名，先使用 Cloudflare 默认的 *.workers.dev 地址。部署成功后必须提醒我记录完整访问地址，否则我可能部署完找不到站点。
-- 如果我想用自定义域名，先说明这是可选项；引导我绑定域名，并记录最终域名。
-- 如果 Deploy to Cloudflare 页面提示仓库名已存在，告诉我这只是 Git 仓库重名，不一定是 Cloudflare 已有重复项目；让我换一个项目/仓库名，例如 goshare-myname。
-- 不要让我把 AUTH_PASSWORD、COOKIE_SECRET、AGENT_API_TOKEN 粘贴到聊天里；需要 secret 时，引导我在终端或 Cloudflare 控制台输入。
-- 默认保持 AUTH_ENABLED=true。除非我明确要求公开创建入口，否则不要关闭登录保护。
-- PUBLIC_SITE_URL 必须设置为最终访问地址：有自定义域名就填自定义域名；没有就填 workers.dev 地址。
-- D1 的 database_id 如果是本地配置需要更新，只能改本地 wrangler.jsonc，不能把真实 database_id 提交到公开仓库。
-- 任何删除、覆盖、重建 Cloudflare 资源的动作，都必须先单独征求我确认。
+请先读取 README.md、docs/AI_DEPLOY_WORKFLOW.md、docs/AI_DEPLOY_GUIDE.md、wrangler.jsonc、migrations/ 和 package.json，然后严格按 workflow 执行。
 
-请严格按 docs/AI_DEPLOY_WORKFLOW.md 的阶段推进：
-1. 先做账号、域名、部署方式和风险确认。
-2. 做部署前安全检查，并说明“安全扫描通过不等于无恶意认证”。
-3. 优先使用 Wrangler CLI 自动化部署；Deploy Button 只作为备选。
-4. 设置生产 Secrets 和变量。
-5. 应用远端 D1 migrations。
-6. 部署 Worker 并记录所有资源。
-7. 做登录、创建、分享卡片、正文页、/bootstrap 和 Agent API 冒烟测试。
-8. 交付 Agent API 使用包：endpoint、Bearer Token 设置状态、curl 模板、返回字段说明、错误处理、DAILY_AGENT_CREATE_LIMIT。
-9. 最后输出部署记录、安全检查结果、未完成项、风险和下一步。
+要求：
+- 优先用 Wrangler CLI；Deploy Button 只作备选。
+- 每一步先解释目的、资源和费用风险，再执行。
+- 不要让我在聊天里粘贴 AUTH_PASSWORD、COOKIE_SECRET、AGENT_API_TOKEN。
+- 完整部署需要可创建 Workers、R2、D1、Workers AI 的 Cloudflare 账号。
+- 部署后交付：访问地址、资源清单、Secrets 状态、冒烟测试、安全检查、Agent API 使用包和未完成项。
 ```
 
 <p align="center">

@@ -13,6 +13,18 @@
 
 AI agent 开始部署前，必须先读取这些文件。实际执行以 `docs/AI_DEPLOY_WORKFLOW.md` 为准；本文件用于解释每一步、处理新手问题和排错。不要只凭聊天历史判断项目状态。
 
+## Prompt 和 Guide 的分工
+
+README、`/landing` 和 `/bootstrap` 里的部署 Prompt 会刻意保持短，只负责启动 AI agent、指定必须读取的文件和交付目标。不要把所有部署细节塞回 Prompt 里。
+
+详细规则放在这里：
+
+- 执行顺序、检查点、停止条件和交付记录：看 `docs/AI_DEPLOY_WORKFLOW.md`。
+- Cloudflare 新手解释、CLI 命令、Agent API 使用包和常见错误：看当前 `docs/AI_DEPLOY_GUIDE.md`。
+- 变量示例、安全提示和 OpenAPI 片段：看 `README.md`。
+
+AI agent 如果遇到不确定的部署细节，应回到这些文件查证，而不是要求用户复制更长的 Prompt。
+
 ## 给新手的解释
 
 Cloudflare 可以理解成一个云平台。goshare 用它来运行一个自托管分享站：
