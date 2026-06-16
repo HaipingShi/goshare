@@ -5,12 +5,13 @@
 ## 文件索引
 
 - `README.md`：项目简介、Deploy Button、环境变量、安全提示、Agent API 示例。
-- `docs/AI_DEPLOY_GUIDE.md`：当前文件，保姆级部署流程和排错清单。
+- `docs/AI_DEPLOY_WORKFLOW.md`：AI agent 必须优先执行的部署 workflow。
+- `docs/AI_DEPLOY_GUIDE.md`：当前文件，给用户看的保姆级解释和排错清单。
 - `wrangler.jsonc`：Cloudflare Worker 配置，包含 Worker 入口、静态资源、D1、R2、Workers AI 绑定。
 - `migrations/`：D1 数据库迁移。远端生产数据库必须应用这些 SQL。
 - `package.json`：本地检查、迁移和部署脚本。
 
-AI agent 开始部署前，必须先读取这些文件。不要只凭聊天历史判断项目状态。
+AI agent 开始部署前，必须先读取这些文件。实际执行以 `docs/AI_DEPLOY_WORKFLOW.md` 为准；本文件用于解释每一步、处理新手问题和排错。不要只凭聊天历史判断项目状态。
 
 ## 给新手的解释
 

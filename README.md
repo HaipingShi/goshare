@@ -12,6 +12,8 @@
 <p align="center">
   <a href="#先复制-prompt-给-ai-部署"><strong>复制 Prompt 部署</strong></a>
   ·
+  <a href="docs/AI_DEPLOY_WORKFLOW.md"><strong>AI 部署 Workflow</strong></a>
+  ·
   <a href="docs/AI_DEPLOY_GUIDE.md"><strong>保姆级部署指南</strong></a>
   ·
   <a href="#部署前你需要知道"><strong>部署前提</strong></a>
@@ -30,17 +32,18 @@
 
 ## 先复制 Prompt 给 AI 部署
 
-第一次部署不用先懂 Cloudflare。建议先复制下面这段给 Codex、Claude Code 或其他 AI coding agent，让它按仓库里的保姆级指南带你完成。
+第一次部署不用先懂 Cloudflare。建议先复制下面这段给 Codex、Claude Code 或其他 AI coding agent，让它先按 workflow 执行，再用 guide 解释和排错。
 
 ```text
 你是我的 goshare Cloudflare 部署向导。目标：把 https://github.com/HaipingShi/goshare 部署到我的 Cloudflare 账号，并完成一次真实冒烟测试。
 
 请先读取并严格使用这些文件，不要只凭记忆操作：
 1. README.md：项目概览、变量说明、安全提示。
-2. docs/AI_DEPLOY_GUIDE.md：每一步的引导、解释、排错和部署记录模板。
-3. wrangler.jsonc：Worker、Static Assets、D1、R2、Workers AI 的绑定配置。
-4. migrations/：需要应用到 Cloudflare D1 的数据库迁移。
-5. package.json：可用脚本和 Wrangler 命令。
+2. docs/AI_DEPLOY_WORKFLOW.md：必须优先执行的部署 workflow，包含阶段、检查点、用户确认点和产出物。
+3. docs/AI_DEPLOY_GUIDE.md：每一步的解释、Cloudflare 新手说明、排错和部署记录模板。
+4. wrangler.jsonc：Worker、Static Assets、D1、R2、Workers AI 的绑定配置。
+5. migrations/：需要应用到 Cloudflare D1 的数据库迁移。
+6. package.json：可用脚本和 Wrangler 命令。
 
 工作方式：
 - 每一步先用一句话解释“这是什么、为什么要做、会创建什么资源或可能产生什么费用”，再给我命令或页面操作。
@@ -54,14 +57,14 @@
 - D1 的 database_id 如果是本地配置需要更新，只能改本地 wrangler.jsonc，不能把真实 database_id 提交到公开仓库。
 - 任何删除、覆盖、重建 Cloudflare 资源的动作，都必须先单独征求我确认。
 
-请按这个顺序执行：
-1. 检查我是否已登录 Cloudflare，并解释没有账号时怎么办。
-2. 优先使用 README 中的 Deploy to Cloudflare 按钮部署；如果按钮流程失败，再使用 Wrangler CLI 兜底。
-3. 引导我设置生产 Secrets：AUTH_PASSWORD、COOKIE_SECRET、AGENT_API_TOKEN。
-4. 确认 D1 migrations 已应用到远端数据库。
-5. 部署 Worker，并记录 Worker 名称、workers.dev URL、自定义域名、D1 数据库、R2 bucket、Git 仓库 URL。
-6. 做冒烟测试：登录页、首页创建 Markdown、/share/<id>、/view/<id>、/bootstrap、Agent API。
-7. 最后输出一份部署记录和还没完成的可选项。
+请严格按 docs/AI_DEPLOY_WORKFLOW.md 的阶段推进：
+1. 先做账号、域名、部署方式和风险确认。
+2. 优先使用 README 中的 Deploy to Cloudflare 按钮部署；失败时再使用 Wrangler CLI 兜底。
+3. 设置生产 Secrets 和变量。
+4. 应用远端 D1 migrations。
+5. 部署 Worker 并记录所有资源。
+6. 做登录、创建、分享卡片、正文页、/bootstrap 和 Agent API 冒烟测试。
+7. 最后输出部署记录、未完成项、风险和下一步。
 ```
 
 <p align="center">
@@ -70,7 +73,7 @@
   </a>
 </p>
 
-更详细的逐步解释见 [docs/AI_DEPLOY_GUIDE.md](docs/AI_DEPLOY_GUIDE.md)。你可以把这份文件当作 AI Agent 的部署说明书。
+AI 执行规程见 [docs/AI_DEPLOY_WORKFLOW.md](docs/AI_DEPLOY_WORKFLOW.md)，逐步解释和排错见 [docs/AI_DEPLOY_GUIDE.md](docs/AI_DEPLOY_GUIDE.md)。这是把“产品说明”拆成“AI 可执行 workflow + 用户可理解 guide”的部署方式。
 
 ![goshare 首页：粘贴 Markdown 后自动识别内容类型](docs/assets/goshare-home.png)
 
@@ -115,7 +118,7 @@ Cloudflare 可以简单理解成一个把小应用部署到全球边缘节点的
 
 ## 一键部署
 
-点击顶部 **Deploy to Cloudflare**，Cloudflare 会读取 `wrangler.jsonc` 并绑定：
+点击上方 **Deploy to Cloudflare**，Cloudflare 会读取 `wrangler.jsonc` 并绑定：
 
 - Worker：`src/worker.js`
 - Static Assets：`public/`
