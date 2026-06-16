@@ -130,20 +130,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderAgentApiPrompt() {
     if (!agentApiPrompt || !agentApiEndpoint) return;
-    const endpoint = `${window.location.origin}/api/agent/pages`;
+    const endpoint = `${window.location.origin}/api/pages/create`;
     agentApiEndpoint.textContent = endpoint;
-    agentApiPrompt.value = `你可以直接调用我的 goshare Agent API 创建分享页，不需要打开网页 UI。
+    agentApiPrompt.value = `你可以直接调用这个 goshare 公开 demo 的创建接口生成分享页，不需要打开网页 UI，也不需要 AGENT_API_TOKEN。
 
 接口：POST ${endpoint}
-鉴权：Authorization: Bearer <AGENT_API_TOKEN>
 
 安全要求：
-- 从安全环境变量或本地 secret 管理器读取 AGENT_API_TOKEN。
-- 不要把真实 token 写进聊天、前端代码、Git 仓库或日志。
+- 这是公开 demo 接口，只适合体验和临时分享。
+- 不要上传隐私、密钥、客户数据或不能公开的代码。
+- 创建内容会受到安全扫描和每日额度限制。
 - 请求失败时先读取 error、logs 和 quota，不要重复盲打请求。
 
 请求 JSON 字段：
-- content：HTML、Markdown、SVG 或 Mermaid 文本。
+- htmlContent：HTML、Markdown、SVG 或 Mermaid 文本。
 - codeType：html、markdown、svg、mermaid 或 zip。
 - markdownTheme：Markdown 可选 bytedance、github、docs、clean、magazine、note、slate。
 - title / summary：可选；不填时 goshare 会尝试生成或提取。
@@ -151,10 +151,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 curl 示例：
 curl -X POST "${endpoint}" \\
-  -H "Authorization: Bearer $AGENT_API_TOKEN" \\
   -H "Content-Type: application/json" \\
   -d '{
-    "content": "# Hello goshare\\n\\nCreated directly from an AI agent.",
+    "htmlContent": "# Hello goshare\\n\\nCreated directly from an AI agent.",
     "codeType": "markdown",
     "markdownTheme": "github",
     "title": "Hello goshare",
@@ -165,7 +164,9 @@ curl -X POST "${endpoint}" \\
 成功后：
 - 把响应里的 cardUrl 或 url 发给我用于转发。
 - 需要正文页时使用 viewUrl。
-- 记录 runId，方便排查本次 Agent API 调用。`;
+- 如果返回 429，说明 demo 今日额度已用完，请稍后再试。
+
+如果你是站点拥有者或授权 agent，才使用需要 Bearer Token 的 /api/agent/pages。`;
   }
   
   // 初始化代码编辑器 - 简化版本，不使用双层结构

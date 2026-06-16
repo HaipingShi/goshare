@@ -269,18 +269,18 @@ export function renderIndexPage(env) {
           <h3 class="section-title agent-api-entry-title">
             <i class="fas fa-robot" aria-hidden="true"></i> AI Agent 自动创建
           </h3>
-          <p class="agent-api-entry-description">复制这段提示词给 Codex、Claude Code 或其他 AI agent，让它通过 HTTP API 直接创建分享页，不需要打开网页 UI。</p>
+          <p class="agent-api-entry-description">复制这段提示词给 Codex、Claude Code 或其他 AI agent，让它在公开 demo 模式下直接调用创建接口。访客不需要 token。</p>
         </div>
         <button id="copy-agent-api-prompt" type="button" class="cyber-btn cyber-btn-secondary micro-interaction">
           <i class="fas fa-copy mr-1" aria-hidden="true"></i>复制 Agent Prompt
         </button>
       </div>
       <div class="agent-api-endpoint-row">
-        <span>API Endpoint</span>
-        <code id="agent-api-endpoint">/api/agent/pages</code>
+        <span>Demo API Endpoint</span>
+        <code id="agent-api-endpoint">/api/pages/create</code>
       </div>
       <textarea id="agent-api-prompt" class="agent-api-prompt" readonly aria-label="AI Agent API 创建分享页提示词"></textarea>
-      <p class="agent-api-entry-note">提示词不会包含真实 <code>AGENT_API_TOKEN</code>。请让 agent 从安全环境变量或你的本地 secret 管理器读取 token。</p>
+      <p class="agent-api-entry-note">这是公开 demo 创建接口，受每日额度和安全扫描限制。站点拥有者或授权 agent 才使用需要 <code>AGENT_API_TOKEN</code> 的 <code>/api/agent/pages</code>。</p>
     </div>
     <div id="preview-section" class="card preview-card" hidden aria-live="polite">
       <div class="preview-card-header">
