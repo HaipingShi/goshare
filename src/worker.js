@@ -6,6 +6,7 @@ import {
   renderLoginPage,
   renderPasswordPage,
   renderBootstrapPage,
+  renderLandingPage,
   renderShareCardPage,
 } from './templates.js';
 import {
@@ -73,6 +74,10 @@ async function handleRequest(request, env) {
 
   if (pathname === '/bootstrap' && request.method === 'GET') {
     return htmlResponse(renderBootstrapPage(env));
+  }
+
+  if (pathname === '/landing' && request.method === 'GET') {
+    return htmlResponse(renderLandingPage(env));
   }
 
   if (pathname === '/admin' && request.method === 'GET') {

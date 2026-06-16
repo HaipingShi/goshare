@@ -336,6 +336,719 @@ export function renderIndexPage(env) {
 ${chromeEnd({ includeMain: true, includeAdminLink: true })}`;
 }
 
+export function renderLandingPage(env) {
+  const config = getAppConfig(env);
+  const deployUrl = buildDeployButtonUrl(config.repoUrl);
+  const zhPrompt = `你是我的 goshare Cloudflare 部署向导。请从 ${config.repoUrl} 获取源码，优先使用 Wrangler CLI 自动化部署到我的 Cloudflare 账号。请先读取 README.md、docs/AI_DEPLOY_WORKFLOW.md、docs/AI_DEPLOY_GUIDE.md、wrangler.jsonc、migrations/ 和 package.json。每一步先解释这是什么、为什么要做、会创建什么资源和可能产生什么费用。完整部署需要已完成验证/绑卡准备的 Cloudflare 账号，并能创建 Workers、R2、D1 和 Workers AI。不要让我把 AUTH_PASSWORD、COOKIE_SECRET、AGENT_API_TOKEN 发到聊天里；需要 secret 时引导我在终端输入。部署后记录 Worker URL、PUBLIC_SITE_URL、D1、R2、Secrets 状态，并完成登录、创建 Markdown、分享卡片、正文页、/bootstrap 和 /api/agent/pages 冒烟测试。`;
+  const enPrompt = `You are my goshare Cloudflare deployment guide. Fetch the source from ${config.repoUrl} and deploy it to my Cloudflare account with Wrangler CLI first. Read README.md, docs/AI_DEPLOY_WORKFLOW.md, docs/AI_DEPLOY_GUIDE.md, wrangler.jsonc, migrations/, and package.json before acting. Before each step, explain what it is, why it matters, what resource it creates, and what may cost money. A full deployment requires a verified and billing-ready Cloudflare account that can create Workers, R2, D1, and Workers AI. Do not ask me to paste AUTH_PASSWORD, COOKIE_SECRET, or AGENT_API_TOKEN into chat; guide me to enter secrets in the terminal. After deployment, record Worker URL, PUBLIC_SITE_URL, D1, R2, secret status, and run smoke tests for login, Markdown creation, share card, content page, /bootstrap, and /api/agent/pages.`;
+  const extraHead = `
+    <style>
+      body[data-page="landing-page"] {
+        min-height: 100vh;
+        background: #08111f;
+      }
+      body[data-page="landing-page"] .app-container {
+        background:
+          linear-gradient(180deg, rgba(8, 17, 31, 0.96), rgba(14, 23, 42, 0.98)),
+          var(--gradient-bg);
+      }
+      body[data-page="landing-page"] .content-container {
+        padding: 0;
+      }
+      .landing-shell {
+        width: min(1180px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 22px 0 72px;
+      }
+      .landing-nav {
+        min-height: 56px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        padding: 10px 0;
+        background: rgba(8, 17, 31, 0.84);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+      }
+      .landing-brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        color: #f8fafc;
+        text-decoration: none;
+        font-family: 'Orbitron', sans-serif;
+        font-weight: 700;
+      }
+      .landing-brand img {
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        object-fit: contain;
+      }
+      .landing-nav-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+      .landing-lang {
+        display: inline-flex;
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        border-radius: 999px;
+        padding: 3px;
+        background: rgba(15, 23, 42, 0.72);
+      }
+      .landing-lang button {
+        min-width: 42px;
+        height: 30px;
+        border: 0;
+        border-radius: 999px;
+        background: transparent;
+        color: #94a3b8;
+        cursor: pointer;
+        font: 700 0.78rem 'Inter', 'Noto Sans SC', sans-serif;
+      }
+      .landing-lang button[aria-pressed="true"] {
+        color: #08111f;
+        background: #f8fafc;
+      }
+      .landing-hero {
+        min-height: calc(100vh - 112px);
+        display: grid;
+        grid-template-columns: minmax(0, 1.02fr) minmax(360px, 0.78fr);
+        align-items: center;
+        gap: clamp(28px, 6vw, 72px);
+        padding: 42px 0 36px;
+      }
+      .landing-kicker {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 30px;
+        padding: 0 10px;
+        margin-bottom: 20px;
+        border-radius: 999px;
+        border: 1px solid rgba(34, 211, 238, 0.32);
+        color: #67e8f9;
+        background: rgba(8, 145, 178, 0.12);
+        font-size: 0.82rem;
+      }
+      .landing-title {
+        margin: 0;
+        max-width: 820px;
+        color: #f8fafc;
+        font-family: 'Orbitron', 'Noto Sans SC', sans-serif;
+        font-size: clamp(3rem, 7.4vw, 6.7rem);
+        line-height: 0.96;
+      }
+      .landing-title span {
+        color: #22d3ee;
+      }
+      .landing-lede {
+        max-width: 720px;
+        margin: 24px 0 0;
+        color: #cbd5e1;
+        font-size: clamp(1.04rem, 2.3vw, 1.26rem);
+        line-height: 1.8;
+      }
+      .landing-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin-top: 30px;
+      }
+      .landing-button {
+        min-height: 46px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 9px;
+        padding: 0 18px;
+        border-radius: 8px;
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        color: #f8fafc;
+        background: rgba(255, 255, 255, 0.06);
+        text-decoration: none;
+        cursor: pointer;
+        font-weight: 700;
+      }
+      .landing-button.primary {
+        border-color: transparent;
+        background: linear-gradient(135deg, #6366f1, #22d3ee);
+        color: white;
+        box-shadow: 0 18px 44px rgba(34, 211, 238, 0.18);
+      }
+      .landing-button.hot {
+        border-color: rgba(248, 113, 113, 0.45);
+        background: rgba(127, 29, 29, 0.22);
+      }
+      .landing-proof {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 28px;
+      }
+      .landing-proof span {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        min-height: 32px;
+        padding: 0 10px;
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        border-radius: 999px;
+        color: #cbd5e1;
+        background: rgba(15, 23, 42, 0.68);
+        font-size: 0.85rem;
+      }
+      .landing-visual {
+        position: relative;
+        min-height: 560px;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 8px;
+        background:
+          linear-gradient(rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+          rgba(15, 23, 42, 0.62);
+        background-size: 28px 28px;
+        overflow: hidden;
+        box-shadow: 0 28px 80px rgba(0, 0, 0, 0.32);
+      }
+      .landing-visual-inner {
+        position: absolute;
+        inset: 22px;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        gap: 16px;
+      }
+      .landing-window {
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        border-radius: 8px;
+        background: rgba(2, 6, 23, 0.74);
+        overflow: hidden;
+      }
+      .landing-window-bar {
+        height: 38px;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 0 12px;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+      }
+      .landing-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: #f87171;
+      }
+      .landing-dot:nth-child(2) {
+        background: #facc15;
+      }
+      .landing-dot:nth-child(3) {
+        background: #34d399;
+      }
+      .landing-code {
+        margin: 0;
+        padding: 18px;
+        color: #cbd5e1;
+        font: 0.82rem/1.75 'Fira Code', monospace;
+        white-space: pre-wrap;
+      }
+      .landing-code strong {
+        color: #67e8f9;
+        font-weight: 700;
+      }
+      .landing-logo-stage {
+        display: grid;
+        place-items: center;
+        min-height: 170px;
+      }
+      .landing-logo-stage img {
+        width: 128px;
+        height: 128px;
+        border-radius: 24px;
+        object-fit: contain;
+        box-shadow: 0 24px 70px rgba(99, 102, 241, 0.34);
+      }
+      .landing-flow {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+      }
+      .landing-flow-step {
+        min-height: 86px;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 8px;
+        padding: 12px;
+        background: rgba(15, 23, 42, 0.74);
+      }
+      .landing-flow-step b {
+        display: block;
+        color: #f8fafc;
+        margin-bottom: 4px;
+      }
+      .landing-flow-step small {
+        color: #94a3b8;
+        line-height: 1.5;
+      }
+      .landing-section {
+        padding: 58px 0 0;
+      }
+      .landing-section-head {
+        max-width: 760px;
+        margin-bottom: 22px;
+      }
+      .landing-section-head h2 {
+        margin: 0;
+        color: #f8fafc;
+        font-size: clamp(2rem, 4.4vw, 3.4rem);
+        line-height: 1.05;
+      }
+      .landing-section-head p {
+        margin: 14px 0 0;
+        color: #cbd5e1;
+        line-height: 1.8;
+      }
+      .landing-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+      .landing-card {
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 8px;
+        padding: 20px;
+        background: rgba(15, 23, 42, 0.64);
+      }
+      .landing-card i {
+        color: #22d3ee;
+        font-size: 1.3rem;
+        margin-bottom: 14px;
+      }
+      .landing-card h3 {
+        margin: 0 0 8px;
+        color: #f8fafc;
+        font-size: 1.05rem;
+      }
+      .landing-card p {
+        margin: 0;
+        color: #cbd5e1;
+        line-height: 1.7;
+      }
+      .landing-loop {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 14px;
+      }
+      .landing-loop-item {
+        position: relative;
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 8px;
+        padding: 18px;
+        background: rgba(2, 6, 23, 0.58);
+      }
+      .landing-loop-number {
+        width: 34px;
+        height: 34px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 14px;
+        border-radius: 50%;
+        color: #08111f;
+        background: #67e8f9;
+        font-weight: 800;
+      }
+      .landing-prompt-panel {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 280px;
+        gap: 18px;
+        align-items: stretch;
+        border: 1px solid rgba(99, 102, 241, 0.38);
+        border-radius: 8px;
+        padding: 18px;
+        background: rgba(15, 23, 42, 0.72);
+      }
+      .landing-prompt {
+        width: 100%;
+        min-height: 260px;
+        resize: vertical;
+        border: 1px solid rgba(148, 163, 184, 0.22);
+        border-radius: 8px;
+        padding: 16px;
+        color: #e2e8f0;
+        background: rgba(2, 6, 23, 0.82);
+        font: 0.88rem/1.7 'Fira Code', monospace;
+      }
+      .landing-prompt-side {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        gap: 14px;
+      }
+      .landing-prompt-side p {
+        color: #cbd5e1;
+        line-height: 1.7;
+        margin: 0;
+      }
+      .landing-footer-cta {
+        margin-top: 64px;
+        padding: 28px;
+        border: 1px solid rgba(34, 211, 238, 0.28);
+        border-radius: 8px;
+        background: rgba(8, 145, 178, 0.12);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+      }
+      .landing-footer-cta h2 {
+        margin: 0;
+        color: #f8fafc;
+      }
+      .landing-footer-cta p {
+        margin: 8px 0 0;
+        color: #cbd5e1;
+      }
+      @media (max-width: 920px) {
+        .landing-hero,
+        .landing-prompt-panel,
+        .landing-grid,
+        .landing-loop {
+          grid-template-columns: 1fr;
+        }
+        .landing-visual {
+          min-height: 520px;
+        }
+        .landing-flow {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .landing-footer-cta {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+      }
+      @media (max-width: 560px) {
+        .landing-shell {
+          width: min(100% - 24px, 1180px);
+          padding-bottom: 48px;
+        }
+        .landing-nav {
+          position: static;
+          align-items: flex-start;
+        }
+        .landing-nav-actions {
+          width: 100%;
+          justify-content: flex-start;
+        }
+        .landing-hero {
+          min-height: auto;
+          padding-top: 28px;
+        }
+        .landing-title {
+          font-size: clamp(2.55rem, 16vw, 4.1rem);
+        }
+        .landing-button,
+        .landing-actions a,
+        .landing-actions button,
+        .landing-footer-cta .landing-button {
+          width: 100%;
+        }
+        .landing-visual {
+          min-height: 610px;
+        }
+        .landing-flow {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>`;
+
+  return `${chromeStart(`${config.appName} | GitHub repo launch`, { htmlAttrs: 'lang="zh-CN" data-page="landing-page"', extraHead, env, defaultOg: true })}
+<main class="landing-shell">
+  <nav class="landing-nav" aria-label="Landing navigation">
+    <a class="landing-brand" href="/">
+      <img src="${escapeHtml(config.logoUrl)}" alt="${escapeHtml(config.appName)} logo">
+      <span>${escapeHtml(config.appName)}</span>
+    </a>
+    <div class="landing-nav-actions">
+      <div class="landing-lang" role="group" aria-label="Language">
+        <button type="button" data-set-lang="zh" aria-pressed="true">中</button>
+        <button type="button" data-set-lang="en" aria-pressed="false">EN</button>
+      </div>
+      <a class="landing-button" href="${escapeHtml(config.repoUrl)}" target="_blank" rel="noopener noreferrer">
+        <i class="fab fa-github" aria-hidden="true"></i><span data-i18n="navRepo">GitHub 仓库</span>
+      </a>
+    </div>
+  </nav>
+
+  <section class="landing-hero">
+    <div>
+      <div class="landing-kicker">
+        <i class="fas fa-seedling" aria-hidden="true"></i>
+        <span data-i18n="kicker">AI 时代的自举式开源分发</span>
+      </div>
+      <h1 class="landing-title" data-i18n-html="heroTitle">把一次 AI 输出，变成会传播的 <span>goshare</span> 站点</h1>
+      <p class="landing-lede" data-i18n="heroLede">goshare 把 HTML、Markdown、SVG、Mermaid 和静态 ZIP 变成你自己 Cloudflare 账号里的分享页。更重要的是，repo 自带 AI 部署 workflow，让用户复制一句 Prompt 就能完成部署、测试和再分发。</p>
+      <div class="landing-actions">
+        <button class="landing-button primary" type="button" data-copy-landing-prompt>
+          <i class="fas fa-copy" aria-hidden="true"></i><span data-i18n="copyPrompt">复制 AI 部署 Prompt</span>
+        </button>
+        <a class="landing-button hot" href="${escapeHtml(config.repoUrl)}" target="_blank" rel="noopener noreferrer">
+          <i class="fab fa-github" aria-hidden="true"></i><span data-i18n="starRepo">Star / Fork Repo</span>
+        </a>
+        <a class="landing-button" href="/bootstrap">
+          <i class="fas fa-terminal" aria-hidden="true"></i><span data-i18n="openBootstrap">打开自部署引导</span>
+        </a>
+      </div>
+      <div class="landing-proof">
+        <span><i class="fas fa-cloud" aria-hidden="true"></i>Cloudflare Workers</span>
+        <span><i class="fas fa-database" aria-hidden="true"></i>R2 + D1</span>
+        <span><i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i>Workers AI</span>
+        <span><i class="fas fa-shield-alt" aria-hidden="true"></i><span data-i18n="proofSecurity">安全自检 workflow</span></span>
+      </div>
+    </div>
+    <div class="landing-visual" aria-label="goshare distribution system">
+      <div class="landing-visual-inner">
+        <div class="landing-window">
+          <div class="landing-window-bar">
+            <span class="landing-dot"></span><span class="landing-dot"></span><span class="landing-dot"></span>
+          </div>
+          <pre class="landing-code"><strong>$</strong> git clone ${escapeHtml(config.repoUrl)}
+<strong>$</strong> npm install
+<strong>$</strong> npx wrangler login
+<strong>$</strong> npx wrangler deploy</pre>
+        </div>
+        <div class="landing-logo-stage">
+          <img src="${escapeHtml(config.logoUrl)}" alt="${escapeHtml(config.appName)} logo">
+        </div>
+        <div class="landing-flow">
+          <div class="landing-flow-step"><b data-i18n="flow1Title">Prompt</b><small data-i18n="flow1Text">用户复制一句话给 AI</small></div>
+          <div class="landing-flow-step"><b data-i18n="flow2Title">CLI</b><small data-i18n="flow2Text">AI 自动执行部署</small></div>
+          <div class="landing-flow-step"><b data-i18n="flow3Title">Share</b><small data-i18n="flow3Text">生成自己的分享站</small></div>
+          <div class="landing-flow-step"><b data-i18n="flow4Title">Fork</b><small data-i18n="flow4Text">从站点回流到 repo</small></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="landing-section">
+    <div class="landing-section-head">
+      <h2 data-i18n="whyTitle">这不是另一个 Deploy Button</h2>
+      <p data-i18n="whyText">goshare 把 README、workflow、guide、安全自检和生产冒烟测试设计成一个可被 AI 执行的产品流程。新用户不用先懂 Cloudflare，也不用在复杂表格里迷路。</p>
+    </div>
+    <div class="landing-grid">
+      <article class="landing-card">
+        <i class="fas fa-route" aria-hidden="true"></i>
+        <h3 data-i18n="card1Title">AI 可执行路径</h3>
+        <p data-i18n="card1Text">从账号确认、资源创建、secret 设置、D1 migration 到最终验收，workflow 明确每一步产出。</p>
+      </article>
+      <article class="landing-card">
+        <i class="fas fa-id-card" aria-hidden="true"></i>
+        <h3 data-i18n="card2Title">分享即传播</h3>
+        <p data-i18n="card2Text">每个部署者都能拥有自己的分享域名、H5 分享卡片和 Agent API，内容可以继续带来新用户。</p>
+      </article>
+      <article class="landing-card">
+        <i class="fas fa-lock" aria-hidden="true"></i>
+        <h3 data-i18n="card3Title">安全先讲清楚</h3>
+        <p data-i18n="card3Text">默认登录保护、内容扫描、每日额度和 secret 规则都写入部署流程，降低开源自部署的不确定性。</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="landing-section">
+    <div class="landing-section-head">
+      <h2 data-i18n="loopTitle">repo 自举裂变回路</h2>
+      <p data-i18n="loopText">落地页的任务不是解释所有功能，而是让访客立刻理解：复制 Prompt，交给 AI，部署自己的 goshare，然后把自己的分享页继续发出去。</p>
+    </div>
+    <div class="landing-loop">
+      <article class="landing-loop-item"><span class="landing-loop-number">1</span><h3 data-i18n="loop1Title">看到用法</h3><p data-i18n="loop1Text">AI 生成内容不再停在聊天窗口，而是变成可访问页面。</p></article>
+      <article class="landing-loop-item"><span class="landing-loop-number">2</span><h3 data-i18n="loop2Title">复制 Prompt</h3><p data-i18n="loop2Text">把部署责任交给 AI agent，用户只做必要授权和 secret 输入。</p></article>
+      <article class="landing-loop-item"><span class="landing-loop-number">3</span><h3 data-i18n="loop3Title">拥有部署</h3><p data-i18n="loop3Text">Worker、R2、D1、Workers AI 都在部署者自己的 Cloudflare 账号里。</p></article>
+      <article class="landing-loop-item"><span class="landing-loop-number">4</span><h3 data-i18n="loop4Title">继续传播</h3><p data-i18n="loop4Text">分享卡片、/bootstrap 和 GitHub repo 共同形成下一轮自举入口。</p></article>
+    </div>
+  </section>
+
+  <section class="landing-section" id="prompt">
+    <div class="landing-section-head">
+      <h2 data-i18n="promptTitle">一键复制给 AI 的部署提示词</h2>
+      <p data-i18n="promptText">这是落地页的主转化动作：让 AI 按 repo 内 workflow 执行，而不是让新用户自己理解 Cloudflare 表格。</p>
+    </div>
+    <div class="landing-prompt-panel">
+      <textarea class="landing-prompt" data-landing-prompt readonly>${escapeHtml(zhPrompt)}</textarea>
+      <aside class="landing-prompt-side">
+        <p data-i18n="promptSide">建议在 Codex、Claude Code 或其他 coding agent 中粘贴。完整部署需要已验证/绑卡并可创建 Workers、R2、D1、Workers AI 的 Cloudflare 账号。</p>
+        <div class="landing-actions">
+          <button class="landing-button primary" type="button" data-copy-landing-prompt>
+            <i class="fas fa-copy" aria-hidden="true"></i><span data-i18n="copyPrompt">复制 AI 部署 Prompt</span>
+          </button>
+          <a class="landing-button" href="${escapeHtml(deployUrl)}" target="_blank" rel="noopener noreferrer">
+            <i class="fas fa-cloud-upload-alt" aria-hidden="true"></i><span data-i18n="deployButton">Deploy to Cloudflare</span>
+          </a>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <section class="landing-footer-cta">
+    <div>
+      <h2 data-i18n="finalTitle">把 repo 做成会自我解释的产品</h2>
+      <p data-i18n="finalText">goshare 的分发重点不是“这里有代码”，而是“这里有一个 AI 可以执行、用户可以理解、结果可以验证的部署流程”。</p>
+    </div>
+    <a class="landing-button primary" href="${escapeHtml(config.repoUrl)}" target="_blank" rel="noopener noreferrer">
+      <i class="fab fa-github" aria-hidden="true"></i><span data-i18n="finalCta">打开 GitHub Repo</span>
+    </a>
+  </section>
+</main>
+<script>
+(function() {
+  const prompts = {
+    zh: ${safeScriptString(zhPrompt)},
+    en: ${safeScriptString(enPrompt)}
+  };
+  const copyLabels = {
+    zh: '已复制',
+    en: 'Copied'
+  };
+  const dictionaries = {
+    zh: {
+      navRepo: 'GitHub 仓库',
+      kicker: 'AI 时代的自举式开源分发',
+      heroTitle: '把一次 AI 输出，变成会传播的 <span>goshare</span> 站点',
+      heroLede: 'goshare 把 HTML、Markdown、SVG、Mermaid 和静态 ZIP 变成你自己 Cloudflare 账号里的分享页。更重要的是，repo 自带 AI 部署 workflow，让用户复制一句 Prompt 就能完成部署、测试和再分发。',
+      copyPrompt: '复制 AI 部署 Prompt',
+      starRepo: 'Star / Fork Repo',
+      openBootstrap: '打开自部署引导',
+      proofSecurity: '安全自检 workflow',
+      flow1Title: 'Prompt',
+      flow1Text: '用户复制一句话给 AI',
+      flow2Title: 'CLI',
+      flow2Text: 'AI 自动执行部署',
+      flow3Title: 'Share',
+      flow3Text: '生成自己的分享站',
+      flow4Title: 'Fork',
+      flow4Text: '从站点回流到 repo',
+      whyTitle: '这不是另一个 Deploy Button',
+      whyText: 'goshare 把 README、workflow、guide、安全自检和生产冒烟测试设计成一个可被 AI 执行的产品流程。新用户不用先懂 Cloudflare，也不用在复杂表格里迷路。',
+      card1Title: 'AI 可执行路径',
+      card1Text: '从账号确认、资源创建、secret 设置、D1 migration 到最终验收，workflow 明确每一步产出。',
+      card2Title: '分享即传播',
+      card2Text: '每个部署者都能拥有自己的分享域名、H5 分享卡片和 Agent API，内容可以继续带来新用户。',
+      card3Title: '安全先讲清楚',
+      card3Text: '默认登录保护、内容扫描、每日额度和 secret 规则都写入部署流程，降低开源自部署的不确定性。',
+      loopTitle: 'repo 自举裂变回路',
+      loopText: '落地页的任务不是解释所有功能，而是让访客立刻理解：复制 Prompt，交给 AI，部署自己的 goshare，然后把自己的分享页继续发出去。',
+      loop1Title: '看到用法',
+      loop1Text: 'AI 生成内容不再停在聊天窗口，而是变成可访问页面。',
+      loop2Title: '复制 Prompt',
+      loop2Text: '把部署责任交给 AI agent，用户只做必要授权和 secret 输入。',
+      loop3Title: '拥有部署',
+      loop3Text: 'Worker、R2、D1、Workers AI 都在部署者自己的 Cloudflare 账号里。',
+      loop4Title: '继续传播',
+      loop4Text: '分享卡片、/bootstrap 和 GitHub repo 共同形成下一轮自举入口。',
+      promptTitle: '一键复制给 AI 的部署提示词',
+      promptText: '这是落地页的主转化动作：让 AI 按 repo 内 workflow 执行，而不是让新用户自己理解 Cloudflare 表格。',
+      promptSide: '建议在 Codex、Claude Code 或其他 coding agent 中粘贴。完整部署需要已验证/绑卡并可创建 Workers、R2、D1、Workers AI 的 Cloudflare 账号。',
+      deployButton: 'Deploy to Cloudflare',
+      finalTitle: '把 repo 做成会自我解释的产品',
+      finalText: 'goshare 的分发重点不是“这里有代码”，而是“这里有一个 AI 可以执行、用户可以理解、结果可以验证的部署流程”。',
+      finalCta: '打开 GitHub Repo'
+    },
+    en: {
+      navRepo: 'GitHub Repo',
+      kicker: 'Self-bootstrapping open source distribution for AI users',
+      heroTitle: 'Turn one AI output into a <span>goshare</span> site that spreads',
+      heroLede: 'goshare turns HTML, Markdown, SVG, Mermaid, and static ZIP output into shareable pages on your own Cloudflare account. The repo ships with an AI deployment workflow, so users can copy one prompt and let an agent deploy, test, and redistribute it.',
+      copyPrompt: 'Copy AI Deploy Prompt',
+      starRepo: 'Star / Fork Repo',
+      openBootstrap: 'Open Bootstrap Guide',
+      proofSecurity: 'Security self-check workflow',
+      flow1Title: 'Prompt',
+      flow1Text: 'User gives one prompt to an agent',
+      flow2Title: 'CLI',
+      flow2Text: 'AI runs the deployment flow',
+      flow3Title: 'Share',
+      flow3Text: 'A personal share station goes live',
+      flow4Title: 'Fork',
+      flow4Text: 'The site points the next user back to the repo',
+      whyTitle: 'This is not just another Deploy Button',
+      whyText: 'goshare treats README, workflow, guide, security checks, and production smoke tests as an AI-executable product flow. New users do not need to understand Cloudflare before they start.',
+      card1Title: 'AI-executable path',
+      card1Text: 'From account checks, resource creation, secrets, D1 migrations, and final verification, the workflow states the output of every step.',
+      card2Title: 'Sharing creates distribution',
+      card2Text: 'Each deployer gets a domain, H5-style share cards, and an Agent API. Shared content can bring the next user back.',
+      card3Title: 'Security is explained first',
+      card3Text: 'Login protection, content scanning, daily limits, and secret handling are built into the deployment flow to reduce self-hosting ambiguity.',
+      loopTitle: 'The repo self-bootstrapping loop',
+      loopText: 'The landing page should not explain every feature. It should make one action obvious: copy the prompt, let AI deploy, own a goshare instance, then share from it.',
+      loop1Title: 'See the use case',
+      loop1Text: 'AI-generated content becomes a real page, not a chat artifact.',
+      loop2Title: 'Copy the prompt',
+      loop2Text: 'The agent owns the deployment flow while the user approves auth and enters secrets.',
+      loop3Title: 'Own the stack',
+      loop3Text: 'Workers, R2, D1, and Workers AI live inside the deployer’s Cloudflare account.',
+      loop4Title: 'Keep spreading',
+      loop4Text: 'Share cards, /bootstrap, and GitHub repo links form the next entry point.',
+      promptTitle: 'The prompt users copy into their AI agent',
+      promptText: 'This is the primary conversion action: make the agent follow the repo workflow instead of making new users interpret Cloudflare tables.',
+      promptSide: 'Paste this into Codex, Claude Code, or another coding agent. Full deployment requires a verified and billing-ready Cloudflare account that can create Workers, R2, D1, and Workers AI.',
+      deployButton: 'Deploy to Cloudflare',
+      finalTitle: 'Make the repo explain itself like a product',
+      finalText: 'The distribution message is not “here is code.” It is “here is an AI-executable, user-legible, verifiable deployment workflow.”',
+      finalCta: 'Open GitHub Repo'
+    }
+  };
+  let currentLang = 'zh';
+  const promptBox = document.querySelector('[data-landing-prompt]');
+
+  function applyLanguage(lang) {
+    currentLang = lang;
+    document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+    document.querySelectorAll('[data-set-lang]').forEach((button) => {
+      button.setAttribute('aria-pressed', button.getAttribute('data-set-lang') === lang ? 'true' : 'false');
+    });
+    document.querySelectorAll('[data-i18n]').forEach((node) => {
+      const key = node.getAttribute('data-i18n');
+      node.textContent = dictionaries[lang][key] || node.textContent;
+    });
+    document.querySelectorAll('[data-i18n-html]').forEach((node) => {
+      const key = node.getAttribute('data-i18n-html');
+      node.innerHTML = dictionaries[lang][key] || node.innerHTML;
+    });
+    if (promptBox) promptBox.value = prompts[lang];
+  }
+
+  async function copyPrompt(event) {
+    const button = event.currentTarget;
+    const label = button.querySelector('span');
+    const original = label ? label.textContent : '';
+    const text = promptBox ? promptBox.value : prompts[currentLang];
+    try {
+      await navigator.clipboard.writeText(text);
+      if (label) label.textContent = copyLabels[currentLang];
+      setTimeout(() => {
+        if (label) label.textContent = original;
+      }, 1400);
+    } catch {
+      window.prompt(copyLabels[currentLang], text);
+    }
+  }
+
+  document.querySelectorAll('[data-set-lang]').forEach((button) => {
+    button.addEventListener('click', () => applyLanguage(button.getAttribute('data-set-lang') || 'zh'));
+  });
+  document.querySelectorAll('[data-copy-landing-prompt]').forEach((button) => {
+    button.addEventListener('click', copyPrompt);
+  });
+  applyLanguage(currentLang);
+})();
+</script>
+${chromeEnd({ includeMain: false })}`;
+}
+
 export function renderBootstrapPage(env) {
   const config = getAppConfig(env);
   const deployUrl = buildDeployButtonUrl(config.repoUrl);

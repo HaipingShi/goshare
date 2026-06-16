@@ -22,6 +22,8 @@
   ·
   <a href="#部署前你需要知道"><strong>部署前提</strong></a>
   ·
+  <a href="#repo-分发落地页"><strong>分发落地页</strong></a>
+  ·
   <a href="#agent-api"><strong>Agent API</strong></a>
   ·
   <a href="#本地开发"><strong>本地开发</strong></a>
@@ -169,6 +171,12 @@ DAILY_AI_LIMIT=20
 `AUTH_ENABLED` 在默认部署配置中已经是 `true`。如果你把它改成 `false`，首页、创建接口、预览和智能美化接口会公开给所有访问者，不建议在生产环境关闭。
 
 `APP_FOOTER_TEXT` 和 `APP_FOOTER_URL` 是可选页脚配置，首次部署不需要填。部署完成后，如果你想在页面底部显示品牌、备案号或官网链接，再到 Worker Variables 手动新增即可。
+
+## Repo 分发落地页
+
+部署后访问 `/landing`，可以看到一张中英文切换的 GitHub repo 分发落地页。它的主转化动作不是直接让新用户填 Cloudflare 表格，而是让用户复制 AI 部署 Prompt，让 Codex、Claude Code 或其他 coding agent 按仓库里的 workflow 完成部署、测试和记录。
+
+这个页面适合放在 README、社交媒体、分享卡片或 `/bootstrap` 引导里，帮助项目形成“看到用途 -> 复制 Prompt -> AI 部署 -> 生成自己的分享站 -> 回流 GitHub repo”的自举传播回路。
 
 ## 安全提示
 
