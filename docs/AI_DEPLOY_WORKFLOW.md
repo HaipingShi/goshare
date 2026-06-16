@@ -352,7 +352,8 @@ PUBLIC_SITE_URL:
 3. 打开 `/share/<id>`，确认 H5 分享卡片正常。
 4. 从卡片进入 `/view/<id>`，确认正文渲染正常。
 5. 打开 `/bootstrap`，确认部署引导页能访问。
-6. 使用 `AGENT_API_TOKEN` 调 `/api/agent/pages`，确认 Agent API 可创建页面。
+6. 打开 `/landing`，确认 repo 分发落地页能访问。
+7. 使用 `AGENT_API_TOKEN` 调 `/api/agent/pages`，确认 Agent API 可创建页面。
 
 Agent API 示例：
 
@@ -375,10 +376,102 @@ Create page test: pass/fail
 Share card test: pass/fail
 View page test: pass/fail
 Bootstrap test: pass/fail
+Landing test: pass/fail
 Agent API test: pass/fail/not configured
 ```
 
-## 阶段 8：交付记录
+## 阶段 8：交付 Agent API 使用包
+
+目标：让部署完成后的 goshare 能直接被 Codex、Claude Code、vibe coding agent 或其他自动化工具调用，不需要再经过网页 UI 创建分享页。
+
+必须先说明：
+
+- Agent API 使用 goshare 自己的 `AGENT_API_TOKEN`，不是 Cloudflare API Token。
+- 不要把真实 token 打印到聊天里、写入 README、提交到 Git 仓库，或放进公开前端代码。
+- Agent API 创建的内容同样会进入部署者自己的 R2/D1，并计入 `DAILY_AGENT_CREATE_LIMIT`。
+- API 返回的 `url` / `cardUrl` 是适合转发的 H5 分享卡片，`viewUrl` 是正文页。
+
+交付给用户的 API 资料：
+
+```txt
+Agent API endpoint:
+Authorization: Bearer <AGENT_API_TOKEN>
+Daily agent create limit:
+Recommended URL to share: cardUrl
+Content URL: viewUrl
+Run id field: runId
+Logs field: logs
+```
+
+AI agent 使用 Prompt：
+
+```text
+你可以直接调用我的 goshare Agent API 创建分享页，不需要打开网页 UI。
+
+接口：POST <PUBLIC_SITE_URL>/api/agent/pages
+鉴权：Authorization: Bearer <AGENT_API_TOKEN>
+
+请求 JSON：
+- content：HTML、Markdown、SVG 或 Mermaid 文本
+- codeType：html、markdown、svg、mermaid 或 zip
+- markdownTheme：Markdown 可选 bytedance、github、docs、clean、magazine、note、slate
+- title / summary：可选；不填时 goshare 会尝试生成或提取
+- isProtected：可选；true 时返回访问密码
+
+创建成功后，把响应里的 cardUrl 或 url 发给我用于转发；需要正文页时使用 viewUrl。失败时先读取 error、logs 和 quota，不要重复盲打请求。
+```
+
+curl 模板：
+
+```bash
+curl -X POST "$PUBLIC_SITE_URL/api/agent/pages" \
+  -H "Authorization: Bearer $AGENT_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "# Hello goshare\n\nCreated directly from an AI agent.",
+    "codeType": "markdown",
+    "markdownTheme": "github",
+    "title": "Hello goshare",
+    "summary": "Created directly from an AI agent.",
+    "isProtected": false
+  }'
+```
+
+成功响应必须包含：
+
+```txt
+success: true
+url/cardUrl:
+viewUrl:
+urlId:
+runId:
+status: completed
+logs:
+```
+
+常见失败处理：
+
+- `401 Agent API 未配置 AGENT_API_TOKEN`：回到 Cloudflare Worker Secrets 设置 `AGENT_API_TOKEN`。
+- `401 请提供 Bearer Token`：请求缺少 `Authorization: Bearer ...`。
+- `401 Bearer Token 无效`：token 和 Worker Secret 不一致，重新设置或确认调用端变量。
+- `429 今日 Agent 创建次数已达上限`：达到 `DAILY_AGENT_CREATE_LIMIT`，第二天 UTC 重置，或在确认风险后调高限制。
+- `400 请求格式错误`：请求体不是合法 JSON，或 content/codeType 字段不符合要求。
+
+产出：
+
+```txt
+Agent API handoff
+- Endpoint:
+- Token stored as Worker Secret: yes/no
+- Token exposed in chat/repo: no
+- Daily agent create limit:
+- Test runId:
+- Test cardUrl:
+- Test viewUrl:
+- Recommended agent instruction delivered: yes/no
+```
+
+## 阶段 9：交付记录
 
 目标：让用户部署完以后知道资源在哪里、站点在哪里、哪些事情还没做。
 
@@ -400,6 +493,8 @@ Deployment summary
 - AUTH_PASSWORD set:
 - COOKIE_SECRET set:
 - AGENT_API_TOKEN set:
+- Agent API endpoint:
+- Agent API handoff delivered:
 - Last migration:
 - Last deploy:
 
@@ -416,7 +511,15 @@ Smoke tests
 - Share card:
 - View page:
 - Bootstrap:
+- Landing:
 - Agent API:
+
+Agent API handoff
+- Endpoint:
+- Daily agent create limit:
+- Test runId:
+- Test cardUrl:
+- Test viewUrl:
 
 Open items
 -
@@ -434,5 +537,6 @@ Next steps
 - 用户知道 Cloudflare 资源名和 Git 仓库位置。
 - 用户知道是否还没绑定自定义域名。
 - 用户知道 Secrets 是否已设置。
+- 用户拿到给 AI agent 直接创建分享页的 Agent API 使用包。
 - 用户知道如何再次找到站点。
 - 用户知道安全检查结果和剩余风险。

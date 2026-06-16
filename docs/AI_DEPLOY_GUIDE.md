@@ -185,6 +185,99 @@ npx wrangler d1 migrations apply goshare-db --remote
 
 迁移成功后，D1 应包含短链、Agent run、页面提交、Markdown 模板和安全额度相关表或字段。
 
+## 部署后给 AI agent 使用
+
+goshare 不只是给人打开网页粘贴内容。部署完成后，Codex、Claude Code、vibe coding agent 或你自己的自动化脚本可以直接调用 HTTP API 创建分享页。
+
+这适合这些场景：
+
+- AI 生成了一份 Markdown 文档，直接发布成分享卡片。
+- AI 写了一个 HTML demo，不想让用户复制到网页 UI。
+- CI 或脚本生成报告后，自动生成一个 `/share/<id>` 链接。
+- 多个 coding agent 需要把阶段性产物发给你预览。
+
+### Agent API 是什么？
+
+接口地址：
+
+```txt
+POST <PUBLIC_SITE_URL>/api/agent/pages
+```
+
+鉴权方式：
+
+```txt
+Authorization: Bearer <AGENT_API_TOKEN>
+```
+
+注意：
+
+- `AGENT_API_TOKEN` 是 goshare 自己的 API 密码，不是 Cloudflare API Token。
+- 不要把真实 token 发到聊天里，也不要提交到 Git 仓库。
+- 创建的正文内容会保存到部署者自己的 R2，元数据和运行日志会保存到部署者自己的 D1。
+- Agent API 使用 `DAILY_AGENT_CREATE_LIMIT` 做每日创建额度限制，默认每个 token 每天 200 次，按 UTC 日期重置。
+
+### 给 AI agent 的使用说明
+
+部署完成后，可以把下面这段交给要调用 goshare 的 AI agent。把 `<PUBLIC_SITE_URL>` 和 `<AGENT_API_TOKEN>` 换成你的环境变量或安全上下文，不要把真实 token 粘贴到公共聊天。
+
+```text
+你可以直接调用我的 goshare Agent API 创建分享页，不需要打开网页 UI。
+
+接口：POST <PUBLIC_SITE_URL>/api/agent/pages
+鉴权：Authorization: Bearer <AGENT_API_TOKEN>
+
+请求 JSON：
+- content：HTML、Markdown、SVG 或 Mermaid 文本
+- codeType：html、markdown、svg、mermaid 或 zip
+- markdownTheme：Markdown 可选 bytedance、github、docs、clean、magazine、note、slate
+- title / summary：可选；不填时 goshare 会尝试生成或提取
+- isProtected：可选；true 时返回访问密码
+
+创建成功后，把响应里的 cardUrl 或 url 发给我用于转发；需要正文页时使用 viewUrl。失败时先读取 error、logs 和 quota，不要重复盲打请求。
+```
+
+### curl 示例
+
+```bash
+curl -X POST "$PUBLIC_SITE_URL/api/agent/pages" \
+  -H "Authorization: Bearer $AGENT_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "content": "# Hello goshare\n\nCreated directly from an AI agent.",
+    "codeType": "markdown",
+    "markdownTheme": "github",
+    "title": "Hello goshare",
+    "summary": "Created directly from an AI agent.",
+    "isProtected": false
+  }'
+```
+
+成功响应里最重要的字段：
+
+```txt
+success: true
+url / cardUrl: 适合转发的 H5 分享卡片
+viewUrl: 正文页
+urlId: 短链 ID
+runId: 本次 Agent API 调用记录 ID
+status: completed
+logs: 本次调用的步骤日志
+quota: 当前 Agent 创建额度状态
+```
+
+如果 `isProtected=true`，响应还会返回 `password`。这个密码只适合临时分享，不要当作长期强加密。
+
+### 常见错误
+
+| 错误 | 含义 | 处理方式 |
+| --- | --- | --- |
+| `Agent API 未配置 AGENT_API_TOKEN` | Worker 里还没有设置 Agent API Secret | 执行 `npx wrangler secret put AGENT_API_TOKEN` |
+| `请提供 Bearer Token` | 请求没有带 `Authorization` header | 加上 `Authorization: Bearer $AGENT_API_TOKEN` |
+| `Bearer Token 无效` | 调用端 token 和 Worker Secret 不一致 | 重新设置 secret 或检查调用端变量 |
+| `今日 Agent 创建次数已达上限` | 达到 `DAILY_AGENT_CREATE_LIMIT` | 等 UTC 次日重置，或确认风险后调高限制 |
+| `请求格式错误` | 请求体不是合法 JSON | 检查 `Content-Type` 和 JSON 字符串 |
+
 ## 部署后必须记录
 
 AI agent 完成部署后，必须输出这份记录：
@@ -203,6 +296,9 @@ AUTH_ENABLED:
 AUTH_PASSWORD set: yes/no
 COOKIE_SECRET set: yes/no
 AGENT_API_TOKEN set: yes/no
+Agent API endpoint:
+Agent API test runId:
+Agent API test cardUrl:
 Workers AI enabled: yes/no
 Last migration result:
 Last deploy result:
@@ -219,7 +315,8 @@ Last deploy result:
 3. 打开返回的 `/share/<id>`，确认是 H5 分享卡片。
 4. 从卡片进入 `/view/<id>`，确认正文正常渲染。
 5. 打开 `/bootstrap`，确认部署引导页能访问。
-6. 如果设置了 `AGENT_API_TOKEN`，用 Agent API 创建一条 Markdown 分享。
+6. 打开 `/landing`，确认 repo 分发落地页能访问。
+7. 如果设置了 `AGENT_API_TOKEN`，用 Agent API 创建一条 Markdown 分享，并把 API 使用说明交付给用户。
 
 Agent API 测试命令：
 

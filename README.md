@@ -82,7 +82,8 @@ goshare 做一件事：把这些内容放进你自己的 Cloudflare R2/D1/Worker
 5. 应用远端 D1 migrations。
 6. 部署 Worker 并记录所有资源。
 7. 做登录、创建、分享卡片、正文页、/bootstrap 和 Agent API 冒烟测试。
-8. 最后输出部署记录、安全检查结果、未完成项、风险和下一步。
+8. 交付 Agent API 使用包：endpoint、Bearer Token 设置状态、curl 模板、返回字段说明、错误处理、DAILY_AGENT_CREATE_LIMIT。
+9. 最后输出部署记录、安全检查结果、未完成项、风险和下一步。
 ```
 
 <p align="center">
