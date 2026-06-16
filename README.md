@@ -50,6 +50,9 @@
 工作方式：
 - 每一步先用一句话解释“这是什么、为什么要做、会创建什么资源或可能产生什么费用”，再给我命令或页面操作。
 - 如果我没有 Cloudflare 账号，先用普通话解释 Cloudflare 是什么：它是运行 Worker、数据库 D1、文件存储 R2 和可选 Workers AI 的云平台；然后引导我注册和登录。
+- 优先用 Wrangler CLI 自动化部署，不要一开始就让我打开 GitHub 的 Deploy Button 页面。只有我没有本地 Node.js/终端环境，或 CLI 失败时，才把 Deploy Button 作为备选。
+- 如果我没有 GitHub 账号，直接从公开仓库 clone 或下载源码部署，不要求我先 fork。
+- 如果 Cloudflare 提示 R2 或 Workers AI 需要绑卡/升级账号，先降级继续部署：关闭 AI 功能；如 R2 无法创建，则说明当前版本依赖 R2 保存正文，先完成账号升级或绑卡后再继续，不要卡在复杂表格里。
 - 如果我没有域名，先使用 Cloudflare 默认的 *.workers.dev 地址。部署成功后必须提醒我记录完整访问地址，否则我可能部署完找不到站点。
 - 如果我想用自定义域名，先说明这是可选项；引导我绑定域名，并记录最终域名。
 - 如果 Deploy to Cloudflare 页面提示仓库名已存在，告诉我这只是 Git 仓库重名，不一定是 Cloudflare 已有重复项目；让我换一个项目/仓库名，例如 goshare-myname。
@@ -62,7 +65,7 @@
 请严格按 docs/AI_DEPLOY_WORKFLOW.md 的阶段推进：
 1. 先做账号、域名、部署方式和风险确认。
 2. 做部署前安全检查，并说明“安全扫描通过不等于无恶意认证”。
-3. 优先使用 README 中的 Deploy to Cloudflare 按钮部署；失败时再使用 Wrangler CLI 兜底。
+3. 优先使用 Wrangler CLI 自动化部署；Deploy Button 只作为备选。
 4. 设置生产 Secrets 和变量。
 5. 应用远端 D1 migrations。
 6. 部署 Worker 并记录所有资源。
@@ -118,22 +121,24 @@ Cloudflare 可以简单理解成一个把小应用部署到全球边缘节点的
 
 准备条件：
 
-- **Cloudflare 账号**：必须。没有账号也可以先点 Deploy Button，按 Cloudflare 引导注册。
-- **GitHub 或 GitLab 账号**：建议准备。Deploy Button 会把项目复制到你的代码托管账号，再部署到你的 Cloudflare。
+- **Cloudflare 账号**：必须。没有账号时先注册 Cloudflare，再让 AI agent 用 Wrangler CLI 引导登录。
+- **本地终端 / Node.js / npm**：推荐准备。AI agent 可以用 CLI 自动完成部署，避免你手动填写 Cloudflare 资源表格。
+- **GitHub 账号**：不是必须。AI agent 可以直接 `git clone https://github.com/HaipingShi/goshare.git` 或下载公开仓库 ZIP 后部署。
 - **自定义域名**：可选。没有域名也能先用 Cloudflare 分配的 `*.workers.dev` 地址。
-- **本地 Node.js / Wrangler**：可选。只有你想在本地开发或手动部署时才需要。
 - **OpenAI API key**：不需要。本项目的 AI 美化走 Cloudflare Workers AI，不走 OpenAI。
 
 费用归属：
 
-- 点击 Deploy Button 后，Worker、R2、D1、Workers AI 都创建在**部署者自己的 Cloudflare 账号**里。
+- 部署后，Worker、R2、D1、Workers AI 都创建在**部署者自己的 Cloudflare 账号**里。
 - Workers AI 用量也计入**部署者自己的 Cloudflare 账号**，不会消耗本仓库作者的 token 或额度。
 - `AGENT_API_TOKEN` 只是你给 coding agent 调 goshare API 用的访问密码，不是 Cloudflare 计费 token。
-- Cloudflare Workers AI 通常有免费额度；高于免费额度或开启付费计划后的用量，以 Cloudflare 当前价格为准。
+- Cloudflare Workers AI 是可选能力；如果账号要求绑卡或你不想使用 AI，可以设置 `AI_ENABLED=false` 和 `AI_SHARE_METADATA_ENABLED=false` 后继续部署。
+- R2 当前用于保存分享正文。如果 Cloudflare 账号不能创建 R2，需要先完成 Cloudflare 的 R2 开通要求，当前版本不能无 R2 完整运行。
+- Cloudflare 免费额度和价格可能变化，最终以 Cloudflare 当前控制台为准。
 
 ## 一键部署
 
-点击上方 **Deploy to Cloudflare**，Cloudflare 会读取 `wrangler.jsonc` 并绑定：
+推荐先让 AI agent 走 Wrangler CLI 自动化部署。上方 **Deploy to Cloudflare** 是备选路径，适合没有本地终端或明确想走网页部署的用户。它会读取 `wrangler.jsonc` 并绑定：
 
 - Worker：`src/worker.js`
 - Static Assets：`public/`
@@ -156,6 +161,14 @@ SECURITY_SCAN_ENABLED=true
 DAILY_CREATE_LIMIT=50
 DAILY_AGENT_CREATE_LIMIT=200
 DAILY_AI_LIMIT=20
+```
+
+如果 Cloudflare Workers AI 不可用或你不想绑卡，改为：
+
+```txt
+AI_ENABLED=false
+AI_SHARE_METADATA_ENABLED=false
+DAILY_AI_LIMIT=0
 ```
 
 `AUTH_ENABLED` 在默认部署配置中已经是 `true`。如果你把它改成 `false`，首页、创建接口、预览和智能美化接口会公开给所有访问者，不建议在生产环境关闭。
@@ -316,9 +329,13 @@ npm run capture:screenshots
 
 ## 手动部署
 
-Deploy Button 之外，也可以用 Wrangler 自己创建资源：
+AI agent 默认应该用 Wrangler CLI 创建资源：
 
 ```bash
+git clone https://github.com/HaipingShi/goshare.git
+cd goshare
+npm install
+npx wrangler login
 npx wrangler d1 create goshare-db
 npx wrangler r2 bucket create goshare-content
 npx wrangler secret put AUTH_PASSWORD
