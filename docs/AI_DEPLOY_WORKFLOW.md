@@ -24,15 +24,15 @@
 - 用户是否能使用 Git；如果没有 GitHub 账号，也可以直接 clone 或下载公开仓库源码。
 - 用户是否要使用自定义域名。
 - 用户是否接受先使用 `*.workers.dev` 地址。
-- 用户是否希望启用 Workers AI。
-- 用户的 Cloudflare 账号是否能创建 R2 bucket、D1 database 和 Workers AI 绑定；如果 Cloudflare 要求绑卡，先解释原因和降级选项。
+- 用户是否理解 Workers AI 会计入部署者自己的 Cloudflare 账号用量。
+- 用户的 Cloudflare 账号是否已完成验证/绑卡准备，并能创建 R2 bucket、D1 database 和 Workers AI 绑定。
 
 用户不懂时的解释：
 
 - Cloudflare 是运行 goshare 的云平台。
 - 没有域名也能部署，先用 Cloudflare 分配的 `workers.dev` 地址。
 - Workers AI 用量计入部署者自己的 Cloudflare 账号，不消耗原作者额度。
-- 部分 Cloudflare 能力可能要求账号验证、绑卡或开通对应服务。AI 功能可关闭继续部署；R2 当前用于保存正文内容，如果账号不能创建 R2，需要先完成 Cloudflare 要求或等待后续无 R2 降级版本。
+- 部分 Cloudflare 能力可能要求账号验证、绑卡或开通对应服务。goshare 完整部署需要 Workers、R2、D1 和 Workers AI 都可创建；如果账号能力不足，先完成 Cloudflare 账号准备，再继续部署。
 
 产出：
 
@@ -41,8 +41,9 @@ Cloudflare account ready: yes/no
 Local terminal ready: yes/no
 Source access: git clone/download/fork
 Domain plan: workers.dev/custom domain
-Workers AI plan: enabled/disabled/undecided
-Cloudflare billing or card blocker: none/ai-only/r2/d1/unknown
+Workers AI usage understood: yes/no
+Cloudflare account ready for Workers/R2/D1/AI: yes/no/unknown
+Cloudflare billing or card blocker: none/present/unknown
 ```
 
 ## 阶段 1：部署前安全检查
@@ -159,7 +160,7 @@ Source repository:
 - Static Assets：托管 `public/`。
 - D1 database：保存短链、页面元数据、提交记录和 Agent 日志。
 - R2 bucket：保存正文内容。
-- Workers AI：可选，用于智能标题摘要和内容美化。
+- Workers AI：用于智能标题摘要和内容美化。
 
 源码获取：
 
@@ -179,10 +180,10 @@ npx wrangler d1 create goshare-db
 npx wrangler r2 bucket create goshare-content
 ```
 
-Cloudflare 账号能力降级：
+Cloudflare 账号能力要求：
 
-- Workers AI 如果提示需要绑卡、开通或当前账号不可用：继续部署，但设置 `AI_ENABLED=false` 和 `AI_SHARE_METADATA_ENABLED=false`。
-- R2 如果提示需要绑卡、开通或当前账号不可用：当前版本不能完整无 R2 运行，因为正文内容存放在 R2。停止部署并解释：需要先按 Cloudflare 要求开通 R2，或等待后续无 R2/D1-only 降级版本。
+- Workers AI 如果提示需要绑卡、开通或当前账号不可用：停止把部署标记为完成，并解释完整体验需要 Workers AI 提供智能美化和智能标题摘要；引导用户完成 Cloudflare 账号准备后再继续。
+- R2 如果提示需要绑卡、开通或当前账号不可用：停止部署并解释 R2 是必需资源，因为正文内容存放在 R2；需要先按 Cloudflare 要求开通 R2。
 - D1 如果不可创建：停止部署并解释 D1 是必须资源，用于短链、元数据和登录状态；需要先解决 Cloudflare 账号能力问题。
 
 Deploy Button 备选操作：
@@ -192,7 +193,7 @@ Deploy Button 备选操作：
 3. 填唯一 Project name。
 4. 创建或选择 D1 database。
 5. 创建或选择 R2 bucket。
-6. 如果 Workers AI 要求绑卡且用户不想绑卡，部署后关闭 `AI_ENABLED` 和 `AI_SHARE_METADATA_ENABLED`。
+6. 如果 Workers AI 要求绑卡或开通服务，先引导用户完成 Cloudflare 账号准备。
 7. 点击 Deploy。
 
 确认点：
@@ -209,8 +210,8 @@ D1 database name:
 D1 database id:
 R2 bucket:
 Workers AI binding:
-AI downgraded: yes/no
-R2 blocker: yes/no
+Cloudflare account ready for full deployment: yes/no
+Resource blocker: none/r2/d1/ai/unknown
 ```
 
 ## 阶段 4：设置 Secrets 和变量
@@ -237,7 +238,7 @@ DAILY_AGENT_CREATE_LIMIT=200
 DAILY_AI_LIMIT=20
 ```
 
-可选：
+AI 和展示配置：
 
 ```txt
 AI_ENABLED=true
@@ -246,14 +247,6 @@ AI_SHARE_METADATA_MODEL=@cf/zai-org/glm-4.7-flash
 MAX_SHARE_METADATA_CONTENT_KB=24
 APP_FOOTER_TEXT=
 APP_FOOTER_URL=
-```
-
-未绑卡或 AI 不可用时：
-
-```txt
-AI_ENABLED=false
-AI_SHARE_METADATA_ENABLED=false
-DAILY_AI_LIMIT=0
 ```
 
 Wrangler CLI 示例：
@@ -268,7 +261,7 @@ npx wrangler secret put AGENT_API_TOKEN
 
 - 终端输入 secret 时不显示明文是正常现象。
 - `PUBLIC_SITE_URL` 必须是最终站点地址。没有自定义域名时填 `workers.dev` 地址。
-- 关闭 AI 后，智能美化和智能标题摘要不可用，但创建、分享、Markdown 渲染、后台管理仍应可用。
+- 如果 Cloudflare 提示 R2、D1 或 Workers AI 需要验证、绑卡或开通服务，先完成账号准备；不要把关闭能力当作完整部署成功。
 
 产出：
 
