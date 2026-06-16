@@ -183,6 +183,7 @@ function appHeader(env) {
   const config = getAppConfig(env);
   return `
     <header class="app-header">
+      <img class="app-logo" src="${escapeHtml(config.logoUrl)}" alt="${escapeHtml(config.appName)} logo" width="72" height="72" onerror="this.hidden=true;">
       <div class="title-container" style="--app-title-ghost: '${escapeHtml(cssString(config.appName))}';">
         <h1 class="cyber-title">${appTitleSpans(config.appName)}</h1>
       </div>
