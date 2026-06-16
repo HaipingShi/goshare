@@ -1,4 +1,4 @@
-AUTH_ENABLED=false
+AUTH_ENABLED=true
 AUTH_PASSWORD=replace-with-a-local-password
 COOKIE_SECRET=replace-with-openssl-rand-hex-32
 COOKIE_PREFIX=goshare

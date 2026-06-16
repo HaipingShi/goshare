@@ -86,7 +86,6 @@ Cloudflare 可以简单理解成一个把小应用部署到全球边缘节点的
 部署后建议立刻在 Cloudflare Worker 的 Variables/Secrets 设置：
 
 ```txt
-AUTH_ENABLED=true
 AUTH_PASSWORD=<your-strong-password>
 COOKIE_SECRET=<openssl rand -hex 32>
 AGENT_API_TOKEN=<agent-api-token-for-coding-agents>
@@ -97,7 +96,21 @@ AI_SHARE_METADATA_MODEL=@cf/zai-org/glm-4.7-flash
 MAX_SHARE_METADATA_CONTENT_KB=24
 ```
 
+`AUTH_ENABLED` 在默认部署配置中已经是 `true`。如果你把它改成 `false`，首页、创建接口、预览和智能美化接口会公开给所有访问者，不建议在生产环境关闭。
+
 `APP_FOOTER_TEXT` 和 `APP_FOOTER_URL` 是可选页脚配置，首次部署不需要填。部署完成后，如果你想在页面底部显示品牌、备案号或官网链接，再到 Worker Variables 手动新增即可。
+
+## 安全提示
+
+goshare 不会要求你的 Cloudflare API Token，也不会把 Worker Secrets 暴露给访问者；但它是一个可以发布 HTML/Markdown/SVG/Mermaid/ZIP 的自托管分享工具，上线前请按下面的方式收紧默认暴露面。
+
+- **保持 `AUTH_ENABLED=true`**：这是生产默认值。关闭后，任何人都能访问首页并创建分享页，可能消耗你的 Workers、R2、D1 和 Workers AI 额度。
+- **Secret 不要写进仓库**：`AUTH_PASSWORD`、`COOKIE_SECRET`、`AGENT_API_TOKEN` 必须在 Cloudflare Worker 的 Secrets 里设置。
+- **使用强随机值**：`COOKIE_SECRET` 建议用 `openssl rand -hex 32`；`AGENT_API_TOKEN` 建议用密码管理器生成 32 位以上随机字符串。
+- **使用独立子域名**：建议部署到 `share.example.com`，不要和你的主站、管理后台或业务系统共用同一个域名。
+- **谨慎打开陌生 HTML/ZIP 分享页**：分享内容会在你的分享域名下渲染。陌生内容建议用无痕窗口查看，不要在后台已登录状态下打开。
+- **5 位访问密码只适合临时分享**：不要把它当作强加密或长期保密方案。
+- **Workers AI 会计入部署者账号用量**：不想产生 AI 调用时，把 `AI_ENABLED=false` 或 `AI_SHARE_METADATA_ENABLED=false`。
 
 ## 用 AI Agent 部署
 

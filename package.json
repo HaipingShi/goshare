@@ -39,10 +39,10 @@
         "description": "R2 存储桶，用于保存用户分享的 HTML/Markdown/SVG/Mermaid 原始内容。"
       },
       "AUTH_ENABLED": {
-        "description": "设置为 `true` 时开启首页和创建接口访问密码；默认 `false`。"
+        "description": "设置为 `true` 时开启首页、创建接口、预览、智能美化和后台管理的访问密码；生产默认应保持 `true`。"
       },
       "AUTH_PASSWORD": {
-        "description": "登录访问密码。部署后建议在 Cloudflare 控制台改成你自己的强密码。"
+        "description": "登录访问密码。必须作为 Secret 设置为你自己的强密码，不要提交到仓库。"
       },
       "COOKIE_SECRET": {
         "description": "用于签名登录 Cookie 的随机字符串。建议使用 `openssl rand -hex 32` 生成。"

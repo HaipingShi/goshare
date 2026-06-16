@@ -536,6 +536,7 @@ export function renderBootstrapPage(env) {
       <ul>
         <li><code>APP_NAME</code>：你的分享站名称。</li>
         <li><code>APP_LOGO_URL</code>：你的 logo 图片 URL，建议使用 512x512 PNG。</li>
+        <li><code>AUTH_ENABLED</code>：生产默认保持 <code>true</code>，保护首页、创建接口、预览和后台。</li>
         <li><code>AUTH_PASSWORD</code>：后台入口密码，必须用 Secret。</li>
         <li><code>COOKIE_SECRET</code>：Cookie 签名密钥，必须用 Secret。</li>
         <li><code>PUBLIC_SITE_URL</code>：绑定后的公开域名。</li>
@@ -577,6 +578,10 @@ export function renderBootstrapPage(env) {
         <div>
           <dt>AUTH_PASSWORD / COOKIE_SECRET / AGENT_API_TOKEN</dt>
           <dd>这些是 Secret，不建议写进代码仓库。<code>AUTH_PASSWORD</code> 是后台入口密码；<code>COOKIE_SECRET</code> 用于签名登录 Cookie；<code>AGENT_API_TOKEN</code> 给 AI coding agent 调 API 创建分享页。</dd>
+        </div>
+        <div>
+          <dt>AUTH_ENABLED</dt>
+          <dd>生产默认保持 <code>true</code>。关闭后首页、创建接口、预览、智能美化和后台管理会暴露给所有访问者，可能带来资源消耗和垃圾内容风险。</dd>
         </div>
         <div>
           <dt>AI_ENABLED / AI_SHARE_METADATA_ENABLED</dt>
