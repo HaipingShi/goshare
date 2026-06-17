@@ -90,6 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const previewStatus = document.getElementById('preview-status');
   const renderPreviewFrame = document.getElementById('render-preview-frame');
   const markdownThemeSelect = document.getElementById('markdown-theme-select');
+  const customSuffixInput = document.getElementById('custom-suffix-input');
   const resultSection = document.getElementById('result-section');
   const resultMeta = document.getElementById('result-meta');
   const resultUrl = document.getElementById('result-url');
@@ -158,6 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
 - codeType：html、markdown、svg、mermaid 或 zip。
 - markdownTheme：Markdown 可选 bytedance、github、docs、clean、magazine、note、slate。
 - title / summary：可选；不填时 goshare 会尝试生成或提取。
+- customSuffix：可选；自定义分享链接后缀，只能用小写字母、数字、短横线或下划线。
 - isProtected：可选；true 时返回临时访问密码。
 
 成功响应契约：
@@ -179,6 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 失败处理：
 - 400 INVALID_JSON / INVALID_REQUEST：修正 JSON 或字段后再发。
+- 409 CUSTOM_SUFFIX_CONFLICT：自定义后缀已被占用，换一个 customSuffix。
 - 409 IDEMPOTENCY_CONFLICT：同一个 Idempotency-Key 已用于不同内容，换 key 后再发。
 - 413 TOO_LARGE：压缩、截断或拆分内容。
 - 422 INVALID_CONTENT：内容未通过安全检测，不要原样重试。
@@ -195,6 +198,7 @@ curl -X POST "${endpoint}" \\
     "markdownTheme": "github",
     "title": "Hello goshare",
     "summary": "Created directly from an AI agent.",
+    "customSuffix": "hello-goshare",
     "isProtected": false
   }'
 
@@ -278,6 +282,32 @@ curl -X POST "${endpoint}" \\
 
   function getMarkdownTheme() {
     return markdownThemeSelect ? markdownThemeSelect.value : 'bytedance';
+  }
+
+  function getCustomSuffix() {
+    if (!customSuffixInput) return { ok: true, value: '' };
+    const raw = customSuffixInput.value.trim();
+    if (!raw) return { ok: true, value: '' };
+
+    const normalized = raw
+      .replace(/^https?:\/\/[^/]+/i, '')
+      .replace(/^\/+/, '')
+      .replace(/^(share|view)\//i, '')
+      .trim()
+      .toLowerCase();
+
+    if (!normalized || normalized.includes('/') || !/^[a-z0-9_-]{1,64}$/.test(normalized)) {
+      return {
+        ok: false,
+        error: '链接后缀只能使用 1-64 位小写字母、数字、短横线或下划线',
+      };
+    }
+
+    if (customSuffixInput.value !== normalized) {
+      customSuffixInput.value = normalized;
+    }
+
+    return { ok: true, value: normalized };
   }
 
   function syncMarkdownThemeControl(codeType) {
@@ -917,6 +947,15 @@ curl -X POST "${endpoint}" \\
     markdownThemeSelect.addEventListener('change', invalidatePreview);
   }
 
+  if (customSuffixInput) {
+    customSuffixInput.addEventListener('input', () => {
+      if (resultSection) {
+        resultSection.style.display = 'none';
+        resultSection.classList.remove('fade-in');
+      }
+    });
+  }
+
   // 生成链接
   if (generateButton) {
     generateButton.addEventListener('click', async () => {
@@ -944,6 +983,12 @@ curl -X POST "${endpoint}" \\
         return;
       }
 
+      const customSuffix = getCustomSuffix();
+      if (!customSuffix.ok) {
+        showErrorToast(customSuffix.error);
+        return;
+      }
+
       try {
         // 显示加载指示器
         loadingIndicator.classList.add('show');
@@ -962,6 +1007,9 @@ curl -X POST "${endpoint}" \\
         const bodyPayload = uploadedZipContent
           ? { zipContent: uploadedZipContent, isProtected, codeType }
           : { htmlContent, isProtected, codeType, markdownTheme: currentMarkdownTheme };
+        if (customSuffix.value) {
+          bodyPayload.customSuffix = customSuffix.value;
+        }
         
         // 调用 API 生成链接
         const response = await fetch('/api/v1/pages/create', {

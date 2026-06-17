@@ -747,6 +747,30 @@ body {
   opacity: 0.55;
 }
 
+.custom-suffix-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.custom-suffix-input {
+  width: 152px;
+  min-height: 42px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  padding: 0.62rem 0.75rem;
+  font: inherit;
+}
+
+.custom-suffix-input::placeholder {
+  color: var(--text-secondary);
+}
+
 /* 防止输入框下方出现重复文本 - 更精确的解决方案 */
 #code-input-container::after,
 #code-input-container::before {
@@ -1287,6 +1311,16 @@ label[for="html-file"] {
 
   .markdown-theme-select {
     flex: 1;
+  }
+
+  .custom-suffix-control {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .custom-suffix-input {
+    flex: 1;
+    width: auto;
   }
 
   .input-actions .cyber-btn {

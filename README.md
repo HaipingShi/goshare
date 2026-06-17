@@ -225,6 +225,7 @@ curl -X POST "https://your-share-domain.example/api/v1/agent/pages" \
     "content": "# Hello goshare\n\nCreated by an agent.",
     "codeType": "markdown",
     "markdownTheme": "github",
+    "customSuffix": "hello-goshare",
     "isProtected": false
   }'
 ```
@@ -290,6 +291,9 @@ paths:
                 markdownTheme:
                   type: string
                   enum: [bytedance, github, docs, clean, magazine, note, slate]
+                customSuffix:
+                  type: string
+                  description: Optional custom URL suffix using lowercase letters, numbers, hyphen, or underscore
                 isProtected:
                   type: boolean
                 title:

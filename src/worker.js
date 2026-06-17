@@ -35,6 +35,7 @@ const DEFAULT_DAILY_AGENT_CREATE_LIMIT = 200;
 const DEFAULT_DAILY_AI_LIMIT = 20;
 const MAX_SECURITY_SCAN_CONTENT_LENGTH = 256 * 1024;
 const VALID_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
+const CUSTOM_SUFFIX_PATTERN = /^[a-z0-9_-]{1,64}$/;
 const VALID_CODE_TYPES = new Set([
   CODE_TYPES.HTML,
   CODE_TYPES.MARKDOWN,
@@ -482,6 +483,10 @@ async function createSharePageFromPayload(payload, env, options = {}) {
   const zipContent = String(payload.zipContent || '').trim();
   const isProtected = Boolean(payload.isProtected);
   const requestedCodeType = String(payload.codeType || '').trim().toLowerCase();
+  const customSuffix = normalizeCustomSuffix(payload);
+  if (customSuffix.error) {
+    return createPageError(customSuffix.error, 400);
+  }
 
   const codeType = VALID_CODE_TYPES.has(requestedCodeType)
     ? requestedCodeType
@@ -587,11 +592,36 @@ async function createSharePageFromPayload(payload, env, options = {}) {
   });
   const shareCardTheme = normalizeShareCardTheme(payload.shareCardTheme);
 
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const urlId = await generatePageId(codeType === CODE_TYPES.ZIP ? zipContent : htmlContent, attempt);
+  const maxAttempts = customSuffix.value ? 1 : 5;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const urlId = customSuffix.value || await generatePageId(codeType === CODE_TYPES.ZIP ? zipContent : htmlContent, attempt);
     const r2Key = codeType === CODE_TYPES.ZIP ? `pages/${urlId}/index.html` : `pages/${urlId}.txt`;
+    let pageRecordReserved = false;
 
     try {
+      if (customSuffix.value && await pageStorageExists(env, urlId, r2Key)) {
+        return createPageError('自定义后缀已被占用，请换一个', 409, { retryable: false });
+      }
+
+      if (customSuffix.value) {
+        await insertPageRecord(env, {
+          urlId,
+          r2Key,
+          createdAt,
+          updatedAt,
+          ownerKey,
+          password,
+          isProtected,
+          codeType,
+          markdownTheme,
+          contentSize,
+          contentHash,
+          metadata,
+          shareCardTheme,
+        });
+        pageRecordReserved = true;
+      }
+
       if (codeType === CODE_TYPES.ZIP) {
         for (const [filename, fileData] of Object.entries(files)) {
           if (filename.endsWith('/') || fileData.length === 0) continue;
@@ -615,28 +645,23 @@ async function createSharePageFromPayload(payload, env, options = {}) {
         });
       }
 
-      await env.DB.prepare(`
-        INSERT INTO pages (id, r2_key, created_at, updated_at, owner_key, password, is_protected, code_type, markdown_theme, content_size, content_sha256, title, summary, metadata_source, share_card_theme)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `)
-        .bind(
+      if (!customSuffix.value) {
+        await insertPageRecord(env, {
           urlId,
           r2Key,
           createdAt,
           updatedAt,
           ownerKey,
           password,
-          isProtected ? 1 : 0,
+          isProtected,
           codeType,
           markdownTheme,
           contentSize,
           contentHash,
-          metadata.title,
-          metadata.summary,
-          metadata.source,
+          metadata,
           shareCardTheme,
-        )
-        .run();
+        });
+      }
 
       return {
         ok: true,
@@ -657,13 +682,87 @@ async function createSharePageFromPayload(payload, env, options = {}) {
       };
     } catch (error) {
       console.error('创建页面错误:', error);
-      if (attempt === 4) {
+      if (pageRecordReserved) {
+        await deletePageRecordQuietly(env, urlId);
+      }
+      if (customSuffix.value && isUniqueConstraintError(error)) {
+        return createPageError('自定义后缀已被占用，请换一个', 409, { retryable: false });
+      }
+      if (attempt === maxAttempts - 1) {
         return createPageError('创建页面失败', 500);
       }
     }
   }
 
   return createPageError('创建页面失败', 500);
+}
+
+async function insertPageRecord(env, page) {
+  await env.DB.prepare(`
+    INSERT INTO pages (id, r2_key, created_at, updated_at, owner_key, password, is_protected, code_type, markdown_theme, content_size, content_sha256, title, summary, metadata_source, share_card_theme)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+    .bind(
+      page.urlId,
+      page.r2Key,
+      page.createdAt,
+      page.updatedAt,
+      page.ownerKey,
+      page.password,
+      page.isProtected ? 1 : 0,
+      page.codeType,
+      page.markdownTheme,
+      page.contentSize,
+      page.contentHash,
+      page.metadata.title,
+      page.metadata.summary,
+      page.metadata.source,
+      page.shareCardTheme,
+    )
+    .run();
+}
+
+async function deletePageRecordQuietly(env, urlId) {
+  try {
+    await env.DB.prepare('DELETE FROM pages WHERE id = ?').bind(urlId).run();
+  } catch (error) {
+    console.warn('清理页面记录失败:', error);
+  }
+}
+
+async function pageStorageExists(env, urlId, r2Key) {
+  if (await getPageRecord(env, urlId)) return true;
+  if (!env.CONTENT_BUCKET?.head) return false;
+
+  try {
+    return Boolean(await env.CONTENT_BUCKET.head(r2Key));
+  } catch (error) {
+    console.warn('检查自定义后缀存储占用失败:', error);
+    return false;
+  }
+}
+
+function normalizeCustomSuffix(payload) {
+  const rawValue = payload.customSuffix ?? payload.customSlug ?? payload.slug ?? '';
+  const raw = String(rawValue || '').trim();
+  if (!raw) return { value: '' };
+
+  const normalized = raw
+    .replace(/^https?:\/\/[^/]+/i, '')
+    .replace(/^\/+/, '')
+    .replace(/^(share|view)\//i, '')
+    .trim()
+    .toLowerCase();
+
+  if (!normalized || normalized.includes('/') || !CUSTOM_SUFFIX_PATTERN.test(normalized)) {
+    return { error: '自定义后缀只能使用 1-64 位小写字母、数字、短横线或下划线' };
+  }
+
+  return { value: normalized };
+}
+
+function isUniqueConstraintError(error) {
+  return /unique|constraint|primary/i.test(String(error?.message || error || ''));
 }
 
 function createPageError(error, status, details = {}) {
@@ -703,7 +802,7 @@ function createPageErrorResponse(result) {
     code: inferCreateErrorCode(result),
     message: result.error,
     status: result.status || 500,
-    retryable: isRetryableStatus(result.status),
+    retryable: result.details?.retryable ?? isRetryableStatus(result.status),
     details: {
       securityFindings: result.details?.findings || undefined,
     },
@@ -728,6 +827,7 @@ function inferCreateErrorCode(result) {
   const status = Number(result?.status || 500);
   const message = String(result?.error || '');
   if (status === 413) return 'TOO_LARGE';
+  if (status === 409 && /后缀|占用|suffix|slug/i.test(message)) return 'CUSTOM_SUFFIX_CONFLICT';
   if (status === 409) return 'IDEMPOTENCY_CONFLICT';
   if (status === 422) return 'INVALID_CONTENT';
   if (status === 429) return 'QUOTA_EXCEEDED';
@@ -742,6 +842,7 @@ function inferCreateErrorCode(result) {
 
 function inferAgentErrorCode(statusCode, message) {
   if (statusCode === 401) return 'UNAUTHORIZED';
+  if (statusCode === 409 && /后缀|占用|suffix|slug/i.test(String(message || ''))) return 'CUSTOM_SUFFIX_CONFLICT';
   if (statusCode === 409) return 'IDEMPOTENCY_CONFLICT';
   if (statusCode === 413) return 'TOO_LARGE';
   if (statusCode === 422) return 'INVALID_CONTENT';
@@ -771,7 +872,7 @@ async function finishAgentRunWithFailure(env, runId, logs, error, statusCode = 5
     error: {
       code: inferAgentErrorCode(statusCode, error),
       message: error,
-      retryable: statusCode === 429 ? false : isRetryableStatus(statusCode),
+      retryable: details?.retryable ?? (statusCode === 429 ? false : isRetryableStatus(statusCode)),
     },
     message: error,
     securityFindings: details.findings,

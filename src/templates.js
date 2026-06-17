@@ -245,6 +245,10 @@ export function renderIndexPage(env) {
                 <option value="slate">深色演示</option>
               </select>
             </label>
+            <label class="custom-suffix-control" for="custom-suffix-input">
+              <span>链接后缀</span>
+              <input id="custom-suffix-input" class="custom-suffix-input" type="text" inputmode="url" autocomplete="off" maxlength="64" placeholder="auto">
+            </label>
           </div>
           <div class="input-actions-right">
             <button id="clear-button" class="cyber-btn cyber-btn-secondary tooltip micro-interaction" data-tooltip="清空内容" aria-label="清空内容">

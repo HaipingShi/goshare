@@ -431,6 +431,7 @@ AI agent 使用 Prompt：
 - codeType：html、markdown、svg、mermaid 或 zip
 - markdownTheme：Markdown 可选 bytedance、github、docs、clean、magazine、note、slate
 - title / summary：可选；不填时 goshare 会尝试生成或提取
+- customSuffix：可选；自定义分享链接后缀，只能用小写字母、数字、短横线或下划线
 - isProtected：可选；true 时返回访问密码
 
 成功后，把响应里的 url 或 cardUrl 发给我用于转发；需要正文页时使用 viewUrl。失败时按 error.code 决策，不要重复盲打请求。
@@ -449,6 +450,7 @@ curl -X POST "$PUBLIC_SITE_URL/api/v1/agent/pages" \
     "markdownTheme": "github",
     "title": "Hello goshare",
     "summary": "Created directly from an AI agent.",
+    "customSuffix": "hello-goshare",
     "isProtected": false
   }'
 ```
