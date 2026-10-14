@@ -1,4 +1,5 @@
 import { extractArticleSource } from './article-source.js';
+import { AiQuotaError, getAiUsage, runMeteredAi } from './ai-quota.js';
 import * as fflate from 'fflate';
 import { sanitizeDocxContent } from './docx-content.js';
 import { validateArticleBlocks, buildArticleAnalysisPrompt, validateArticleAnalysis, validateDiagramKinds, validateArticleDiagrams, ARTICLE_PROMPT_VERSION } from './article-analysis.js';
@@ -35,7 +36,6 @@ const MAX_SHARE_TITLE_LENGTH = 80;
 const MAX_SHARE_SUMMARY_LENGTH = 180;
 const DEFAULT_DAILY_CREATE_LIMIT = 50;
 const DEFAULT_DAILY_AGENT_CREATE_LIMIT = 200;
-const DEFAULT_DAILY_AI_LIMIT = 20;
 const MAX_SECURITY_SCAN_CONTENT_LENGTH = 256 * 1024;
 const VALID_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
 const CUSTOM_SUFFIX_PATTERN = /^[a-z0-9_-]{1,64}$/;
@@ -285,6 +285,7 @@ async function createPage(request, env) {
 
   const result = await createSharePageFromPayload(payload.data, env, {
     ownerKey: owner.ownerKey,
+    aiScope: `ai:${submitterKey}`,
   });
   if (!result.ok) return createPageErrorResponse(result);
 
@@ -354,6 +355,7 @@ async function createAgentPage(request, env) {
 
     const result = await createSharePageFromPayload(payload.data, env, {
       ownerKey: auth.ownerKey,
+      aiScope: `ai:${await getSubmitterKey(request, env)}`,
     });
     if (!result.ok) {
       return finishAgentRunWithFailure(env, runId, logs, result.error, result.status, result.details);
@@ -427,12 +429,13 @@ async function getQuotaInfo(request, env) {
   assertBindings(env);
   const submitterKey = await getSubmitterKey(request, env);
   const createQuota = await getDailyUsageState(env, `create:${submitterKey}`, getDailyCreateLimit(env));
-  const aiQuota = await getDailyUsageState(env, `ai:${submitterKey}`, getDailyAiLimit(env));
+  const aiState = await getAiUsage(env, `ai:${submitterKey}`);
   const result = {
     success: true,
     quotas: {
       create: quotaSummary(createQuota),
-      ai: quotaSummary(aiQuota),
+      ai: aiState.quota,
+      aiBudget: aiState.budget,
     },
   };
 
@@ -611,8 +614,12 @@ async function createSharePageFromPayload(payload, env, options = {}) {
     }
   }
 
+  if (customSuffix.value && await pageStorageExists(env, customSuffix.value, `pages/${customSuffix.value}.txt`)) {
+    return createPageError('自定义后缀已被占用，请换一个', 409, { retryable: false });
+  }
   const metadata = await generateShareMetadata({
     env,
+    aiScope: options.aiScope,
     content: codeType === CODE_TYPES.ZIP ? '' : htmlContent,
     codeType,
     providedTitle: payload.title,
@@ -851,6 +858,11 @@ function apiErrorResponse({ code, message, status = 500, retryable = false, quot
   }, status, headers);
 }
 
+function aiQuotaErrorResponse(error) {
+  return jsonResponse({ success: false, error: { code: error.code, message: error.message, retryable: false },
+    quota: error.state?.quota, budget: error.state?.budget }, error.code === 'AI_MODEL_BUDGET_UNSUPPORTED' ? 503 : 429);
+}
+
 function inferCreateErrorCode(result) {
   const status = Number(result?.status || 500);
   const message = String(result?.error || '');
@@ -1077,62 +1089,36 @@ async function beautifyPage(request, env) {
     return jsonResponse({ success: false, error: 'DOCX 请使用文章预览中的 AI 分析全文，保留原文和图片。' }, 400);
   }
 
-  const quota = await enforceDailyLimit(env, `ai:${await getSubmitterKey(request, env)}`, getDailyAiLimit(env));
-  if (!quota.ok) {
-    return dailyLimitResponse(quota, '今日智能美化次数已达上限');
-  }
-
   const maxBeautifyContentLength = getMaxBeautifyContentLength(env);
   if (input.content.length > maxBeautifyContentLength) {
     return jsonResponse({ success: false, error: `智能美化内容过大，请控制在${Math.floor(maxBeautifyContentLength / 1024)}KB以内。` }, 413);
   }
-
-  const model = String(env.AI_BEAUTIFY_MODEL || DEFAULT_BEAUTIFY_MODEL);
-  const prompt = buildBeautifyPrompt(input.content, input.codeType);
-
-  let aiResult;
   try {
-    aiResult = await env.AI.run(model, {
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a senior frontend designer. Return only valid JSON.',
-        },
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-      temperature: 0.35,
-      max_completion_tokens: diagramKinds.some(kind => kind !== 'mindmap') ? 6144 : 4096,
-    });
+    const result = await runMeteredAi(env, `ai:${await getSubmitterKey(request, env)}`,
+      String(env.AI_BEAUTIFY_MODEL || DEFAULT_BEAUTIFY_MODEL), {
+        messages: [
+          { role: 'system', content: 'You are a senior frontend designer. Return only valid JSON.' },
+          { role: 'user', content: buildBeautifyPrompt(input.content, input.codeType) },
+        ],
+        temperature: 0.35, max_completion_tokens: 4096,
+        chat_template_kwargs: { enable_thinking: false },
+        response_format: { type: 'json_object' },
+      }, aiResult => {
+        const parsed = parseBeautifyResult(aiResult);
+        if (!parsed.ok) throw new Error(parsed.error);
+        const content = String(parsed.value.content || '').trim();
+        if (!content || content.length > MAX_CONTENT_LENGTH) throw new Error('智能美化未返回可保存的内容。');
+        return {
+          codeType: normalizeDetectedCodeType(parsed.value.codeType || CODE_TYPES.HTML), htmlContent: content,
+          warnings: Array.isArray(parsed.value.warnings) ? parsed.value.warnings.slice(0, 5) : [],
+        };
+      });
+    return jsonResponse({ success: true, ...result.value, quota: result.quota, budget: result.budget });
   } catch (error) {
-    console.error('AI beautify failed:', error);
-    return jsonResponse({ success: false, error: '智能美化调用失败，请稍后重试。' }, 502);
+    if (error instanceof AiQuotaError) return aiQuotaErrorResponse(error);
+    console.error('AI beautify failed:', error?.name || 'Error');
+    return jsonResponse({ success: false, error: '智能美化调用或结果校验失败，本次不扣 AI 次数。' }, 502);
   }
-
-  const parsed = parseBeautifyResult(aiResult);
-  if (!parsed.ok) {
-    return jsonResponse({ success: false, error: parsed.error }, 502);
-  }
-
-  const normalizedCodeType = normalizeDetectedCodeType(parsed.value.codeType || CODE_TYPES.HTML);
-  const beautifiedContent = String(parsed.value.content || '').trim();
-  if (!beautifiedContent) {
-    return jsonResponse({ success: false, error: '智能美化未返回可用内容。' }, 502);
-  }
-
-  if (beautifiedContent.length > MAX_CONTENT_LENGTH) {
-    return jsonResponse({ success: false, error: '智能美化结果过大，无法保存。' }, 413);
-  }
-
-  return jsonResponse({
-    success: true,
-    codeType: normalizedCodeType,
-    htmlContent: beautifiedContent,
-    warnings: Array.isArray(parsed.value.warnings) ? parsed.value.warnings.slice(0, 5) : [],
-    quota: quotaSummary(quota),
-  });
 }
 
 async function analyzeArticle(request, env) {
@@ -1153,31 +1139,29 @@ async function analyzeArticle(request, env) {
   } catch (error) {
     return apiErrorResponse({ code: error instanceof RangeError ? 'TOO_LARGE' : 'INVALID_REQUEST', message: error.message, status: error instanceof RangeError ? 413 : 400 });
   }
-  const quota = await enforceDailyLimit(env, `ai:${await getSubmitterKey(request, env)}`, getDailyAiLimit(env));
-  if (!quota.ok) return dailyLimitResponse(quota, '今日 AI 次数已达上限，文章分析与智能美化共用额度。');
   try {
     const model = String(env.AI_BEAUTIFY_MODEL || DEFAULT_BEAUTIFY_MODEL);
-    const result = await env.AI.run(model, {
+    const result = await runMeteredAi(env, `ai:${await getSubmitterKey(request, env)}`, model, {
       messages: [
         { role: 'system', content: 'You analyze articles into evidence-grounded semantic trees. Return only valid JSON.' },
         { role: 'user', content: buildArticleAnalysisPrompt(blocks, diagramKinds.filter(kind => kind !== 'mindmap')) },
       ],
       temperature: 0.2,
-      max_completion_tokens: 4096,
-      ...(model === DEFAULT_BEAUTIFY_MODEL ? {
-        response_format: { type: 'json_object' },
-        chat_template_kwargs: { enable_thinking: false },
-      } : {}),
+      max_completion_tokens: diagramKinds.some(kind => kind !== 'mindmap') ? 6144 : 4096,
+      response_format: { type: 'json_object' },
+      chat_template_kwargs: { enable_thinking: false },
+    }, aiResult => {
+      const parsed = JSON.parse(stripMarkdownFence(extractAiText(aiResult)));
+      const analysis = validateArticleAnalysis(parsed, blocks);
+      analysis.diagrams = diagramKinds.some(kind => kind !== 'mindmap') ? validateArticleDiagrams(parsed.diagrams, blocks, diagramKinds) : [];
+      analysis.promptVersion = ARTICLE_PROMPT_VERSION;
+      return analysis;
     });
-    const raw = stripMarkdownFence(extractAiText(result));
-    const parsed = JSON.parse(raw);
-    const analysis = validateArticleAnalysis(parsed, blocks);
-    analysis.diagrams = diagramKinds.some(kind => kind !== 'mindmap') ? validateArticleDiagrams(parsed.diagrams, blocks, diagramKinds) : [];
-    analysis.promptVersion = ARTICLE_PROMPT_VERSION;
-    return jsonResponse({ success: true, analysis, quota: quotaSummary(quota) });
+    return jsonResponse({ success: true, analysis: result.value, quota: result.quota, budget: result.budget });
   } catch (error) {
+    if (error instanceof AiQuotaError) return aiQuotaErrorResponse(error);
     console.error('AI article analysis failed:', error?.name || 'Error');
-    return apiErrorResponse({ code: 'AI_ANALYSIS_FAILED', message: 'AI 分析暂未返回有效的原文节点，请稍后重试。', status: 502, retryable: true, quota });
+    return apiErrorResponse({ code: 'AI_ANALYSIS_FAILED', message: 'AI 分析暂未返回有效结果，本次不扣 AI 次数，请稍后重试。', status: 502, retryable: true });
   }
 }
 
@@ -1384,6 +1368,7 @@ async function updateOwnedPage(request, env, id) {
   const updatedAt = Date.now();
   const metadata = await generateShareMetadata({
     env,
+    aiScope: `ai:${await getSubmitterKey(request, env)}`,
     content: htmlContent,
     codeType,
     providedTitle: payload.title,
@@ -2052,10 +2037,6 @@ function getDailyAgentCreateLimit(env) {
   return getPositiveIntegerEnv(env, 'DAILY_AGENT_CREATE_LIMIT', DEFAULT_DAILY_AGENT_CREATE_LIMIT, 10000);
 }
 
-function getDailyAiLimit(env) {
-  return getPositiveIntegerEnv(env, 'DAILY_AI_LIMIT', DEFAULT_DAILY_AI_LIMIT, 10000);
-}
-
 function getPositiveIntegerEnv(env, name, defaultValue, maxValue) {
   const raw = String(env[name] ?? '').trim();
   if (!raw) return defaultValue;
@@ -2065,7 +2046,7 @@ function getPositiveIntegerEnv(env, name, defaultValue, maxValue) {
   return Math.min(parsed, maxValue);
 }
 
-async function generateShareMetadata({ env, content, codeType, providedTitle, providedSummary }) {
+export async function generateShareMetadata({ env, aiScope, content, codeType, providedTitle, providedSummary }) {
   const fallback = extractFallbackShareMetadata(content, codeType);
   const manualTitle = normalizeShareTitle(providedTitle);
   const manualSummary = normalizeShareSummary(providedSummary);
@@ -2078,9 +2059,9 @@ async function generateShareMetadata({ env, content, codeType, providedTitle, pr
     };
   }
 
-  if (shouldUseShareMetadataAi(env, content, codeType)) {
+  if (aiScope && shouldUseShareMetadataAi(env, content, codeType)) {
     try {
-      const aiMetadata = await generateAiShareMetadata(env, content, codeType);
+      const aiMetadata = await generateAiShareMetadata(env, aiScope, content, codeType);
       if (aiMetadata) {
         return {
           title: manualTitle || aiMetadata.title || fallback.title,
@@ -2089,7 +2070,7 @@ async function generateShareMetadata({ env, content, codeType, providedTitle, pr
         };
       }
     } catch (error) {
-      console.error('AI share metadata failed:', error);
+      console.warn('AI share metadata skipped:', error?.code || error?.name || 'Error');
     }
   }
 
@@ -2102,13 +2083,13 @@ async function generateShareMetadata({ env, content, codeType, providedTitle, pr
 
 function shouldUseShareMetadataAi(env, content, codeType) {
   if (codeType === CODE_TYPES.ZIP) return false;
-  if (!content || !env.AI) return false;
+  if (!content || !env.AI || String(env.AI_ENABLED || 'true').toLowerCase() === 'false') return false;
   const explicit = String(env.AI_SHARE_METADATA_ENABLED || '').trim().toLowerCase();
   if (explicit) return explicit !== 'false';
   return String(env.AI_ENABLED || 'true').toLowerCase() !== 'false';
 }
 
-async function generateAiShareMetadata(env, content, codeType) {
+async function generateAiShareMetadata(env, aiScope, content, codeType) {
   if (codeType === CODE_TYPES.DOCX) content = htmlToText(content);
   const model = String(env.AI_SHARE_METADATA_MODEL || DEFAULT_SHARE_METADATA_MODEL);
   const prompt = buildShareMetadataPrompt(
@@ -2116,31 +2097,21 @@ async function generateAiShareMetadata(env, content, codeType) {
     codeType,
   );
 
-  const aiResult = await env.AI.run(model, {
+  const result = await runMeteredAi(env, aiScope, model, {
     messages: [
-      {
-        role: 'system',
-        content: 'You write concise share-card metadata. Return only valid JSON.',
-      },
-      {
-        role: 'user',
-        content: prompt,
-      },
+      { role: 'system', content: 'You write concise share-card metadata. Return only valid JSON.' },
+      { role: 'user', content: prompt },
     ],
-    temperature: 0.2,
-    max_completion_tokens: 512,
+    temperature: 0.2, max_completion_tokens: 512,
+    chat_template_kwargs: { enable_thinking: false },
+    response_format: { type: 'json_object' },
+  }, aiResult => {
+    const parsed = JSON.parse(stripMarkdownFence(extractAiText(aiResult).trim()));
+    const title = normalizeShareTitle(parsed?.title), summary = normalizeShareSummary(parsed?.summary);
+    if (!title || !summary) throw new Error('AI metadata must contain a valid title and summary');
+    return { title, summary };
   });
-
-  const rawText = extractAiText(aiResult).trim();
-  if (!rawText) return null;
-
-  const parsed = JSON.parse(stripMarkdownFence(rawText));
-  if (!parsed || typeof parsed !== 'object') return null;
-
-  const title = normalizeShareTitle(parsed.title);
-  const summary = normalizeShareSummary(parsed.summary);
-  if (!title && !summary) return null;
-  return { title, summary };
+  return result.value;
 }
 
 function buildShareMetadataPrompt(content, codeType) {
@@ -2307,7 +2278,7 @@ function parseBeautifyResult(aiResult) {
     }
     return { ok: true, value: parsed };
   } catch (error) {
-    console.error('AI beautify JSON parse failed:', error, rawText.slice(0, 500));
+    console.error('AI beautify JSON parse failed:', error?.name || 'Error');
     return { ok: false, error: '智能美化返回格式无法解析。' };
   }
 }

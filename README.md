@@ -143,7 +143,8 @@ MAX_SHARE_METADATA_CONTENT_KB=24
 SECURITY_SCAN_ENABLED=true
 DAILY_CREATE_LIMIT=50
 DAILY_AGENT_CREATE_LIMIT=200
-DAILY_AI_LIMIT=20
+DAILY_AI_LIMIT=50
+DAILY_AI_NEURON_BUDGET=8000
 ```
 
 `AUTH_ENABLED` 在默认部署配置中已经是 `true`。如果你把它改成 `false`，首页、创建接口、预览和智能美化接口会公开给所有访问者，不建议在生产环境关闭。
@@ -179,7 +180,8 @@ goshare 不会要求你的 Cloudflare API Token，也不会把 Worker Secrets �
 | `SECURITY_SCAN_ENABLED` | `true` | 创建分享页前扫描高风险 HTML/ZIP/脚本模式 |
 | `DAILY_CREATE_LIMIT` | `50` | 每个访问者每天通过网页创建的分享页数量 |
 | `DAILY_AGENT_CREATE_LIMIT` | `200` | 每个 Agent Token 每天通过 Agent API 创建的分享页数量 |
-| `DAILY_AI_LIMIT` | `20` | 每个访问者每天调用智能美化的次数 |
+| `DAILY_AI_LIMIT` | `50` | 每个访问者每天成功调用文章分析、智能美化和分享卡片 AI 的总次数 |
+| `DAILY_AI_NEURON_BUDGET` | `8000` | 全站每日 AI 预算（Neurons），超过预算停止调用；不能设置为无限或超过 10000 |
 
 这些限制按 UTC 日期重置；把限制值设为 `0` 表示关闭对应限额。
 

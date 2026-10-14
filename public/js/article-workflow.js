@@ -103,7 +103,7 @@
               analysis = result.analysis;
               cached = analysis;
               cachedBase = base;
-              document.getElementById('workflow-summary').textContent = result.quota?.remaining === undefined ? 'AI 分析完成' : `AI 分析完成 · 今日剩余 ${result.quota.remaining} 次`;
+              document.getElementById('workflow-summary').textContent = result.quota?.remaining == null ? 'AI 分析完成' : `AI 分析完成 · 今日剩余 ${result.quota.remaining} / ${result.quota.limit} 次${result.budget ? ` · 全站预算剩余 ${Math.floor(result.budget.remaining)} Neurons` : ''}`;
             } else {
               analysis = source.headingAnalysis;
               if (!analysis && kinds.length) throw new Error('原文没有标题，无法生成标题导图。请选择 AI 分析，或取消图形后直接预览。');

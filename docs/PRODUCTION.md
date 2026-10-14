@@ -24,4 +24,6 @@ npm run deploy            # dry-run → 线上配置核对 → 远端迁移 → 
 
 生产配置启用 `keep_vars`，控制台新增的普通变量不会被删除。配置中明确写出的变量仍是 Wrangler 的发布输入，因此发布前会逐项与线上比对。若控制台配置发生变化，先从线上同步到本地；若确实要调整生产配置，先审阅并应用该变更，再更新本地配置和运行核对。额外的线上 Secrets 会由 Wrangler 保留。
 
+主动修改 AI 次数或全站免费预算时，可将目标值写入被忽略的生产配置，并在被忽略的 `.wrangler/production-vars-change.json` 中记录各变量的 `{ "from": "旧值", "to": "目标值" }`；此前不存在的变量使用 `from: null`。执行 `npm run deploy:vars`。该命令只允许调整 `DAILY_AI_LIMIT` 和 `DAILY_AI_NEURON_BUDGET`，先逐项核对线上旧值、其他全部配置与绑定，再应用迁移和发布目标配置。成功后删除变更计划；以后恢复使用 `npm run deploy`，继续严格核对。不得把生产值或计划提交到仓库。
+
 自动核对覆盖变量、D1/R2/AI/静态资源绑定、必需 Secret 名称及兼容日期/标志；不会验证 Secret 值，也不核对控制台域名、日志、路由或静态资源策略。调整这些设置时须同时检查 Cloudflare 和本地配置。直接运行 `npx wrangler deploy` 会绕过本项目的保护检查，应使用 `npm run deploy`。

@@ -13,6 +13,7 @@
     "check:production": "node scripts/production.mjs check",
     "production:verify": "node scripts/production.mjs verify",
     "deploy": "node scripts/production.mjs deploy",
+    "deploy:vars": "node scripts/production.mjs deploy-vars",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "node scripts/production.mjs migrate",
     "build:docx": "node scripts/build-docx.mjs",
@@ -21,7 +22,8 @@
     "predev": "npm run build:docx",
     "precheck": "npm run build:docx",
     "precheck:production": "npm run build:docx",
-    "predeploy": "npm run build:docx"
+    "predeploy": "npm run build:docx",
+    "predeploy:vars": "npm run build:docx"
   },
   "keywords": [
     "html",
@@ -93,7 +95,10 @@
         "description": "每个 Agent Token 每天可通过 Agent API 创建的分享页数量。默认 `200`，设置为 `0` 表示不限制。"
       },
       "DAILY_AI_LIMIT": {
-        "description": "每个访问者每天可调用智能美化的次数。默认 `20`，设置为 `0` 表示不限制。"
+        "description": "每个访问者每天成功调用文章分析、智能美化和分享卡片 AI 的总次数。默认 `50`，失败不扣个人次数，`0` 仅关闭个人次数限制。"
+      },
+      "DAILY_AI_NEURON_BUDGET": {
+        "description": "全站每日 AI 预算，单位 Neurons。默认 `8000`，保留免费额度余量；不能关闭或高于 `10000`。"
       }
     }
   }

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { runProduction, validateProductionConfig, verifyProductionBindings } from '../scripts/production.mjs';
+import { runProduction, validateProductionConfig, verifyProductionBindings, verifyVariablePlan } from '../scripts/production.mjs';
 
 function fixture() {
   const config = {
@@ -105,4 +105,19 @@ test('deploy verifies first, migrates second, and publishes last using the same 
   ]);
   assert(calls[3].includes('apply') && calls[3].includes('--remote'));
   assert(calls.every((args) => args.at(-2) === '--config' && args.at(-1) === calls[0].at(-1)));
+});
+
+test('explicit AI variable changes verify the previous values and all unchanged production bindings', () => {
+  const { config, version } = fixture();
+  version.resources.bindings.push({ name: 'DAILY_AI_LIMIT', type: 'plain_text', text: '3' });
+  config.vars.DAILY_AI_LIMIT = '50';
+  config.vars.DAILY_AI_NEURON_BUDGET = '8000';
+  const changes = { DAILY_AI_LIMIT: { from: '3', to: '50' }, DAILY_AI_NEURON_BUDGET: { from: null, to: '8000' } };
+  assert.doesNotThrow(() => verifyVariablePlan(config, version, changes));
+  assert.throws(() => verifyVariablePlan(config, version, { ...changes, AUTH_PASSWORD: { from: null, to: 'secret' } }));
+  version.resources.bindings.find(b => b.name === 'DAILY_AI_LIMIT').text = '4';
+  assert.throws(() => verifyVariablePlan(config, version, changes), /线上值已变化/);
+  version.resources.bindings.find(b => b.name === 'DAILY_AI_LIMIT').text = '3';
+  version.resources.bindings.find(b => b.name === 'AUTH_ENABLED').text = 'true';
+  assert.throws(() => verifyVariablePlan(config, version, changes), /AUTH_ENABLED/);
 });

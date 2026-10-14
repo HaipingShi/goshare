@@ -283,7 +283,7 @@ export function renderIndexPage(env) {
         <label class="workflow-choice"><input type="checkbox" name="workflow-diagram" value="mindmap" checked><div><strong>思维导图</strong><span>以主题层级展示文章重点，精简分支、统一配色。</span></div></label>
         <label class="workflow-choice"><input type="checkbox" name="workflow-diagram" value="flowchart"><div><strong>流程图 · 需要 AI</strong><span>提炼原文中的步骤、判断和依赖，不把目录顺序当作流程。</span></div></label>
         <label class="workflow-choice"><input type="checkbox" name="workflow-diagram" value="architecture"><div><strong>架构图 · 需要 AI</strong><span>展示原文中的组成、边界和依赖。没有依据时不生成。</span></div></label>
-        <p class="workflow-note">可多选或全部取消。图形会插入正文 HTML，并随分享保存。AI 分析与关系图合并为一次调用，使用站点每日 AI 额度。</p>
+        <p class="workflow-note">可多选或全部取消。图形会插入正文 HTML，并随分享保存。AI 分析与关系图合计一次，失败不扣次数；与智能美化、分享卡片 AI 共用每日额度，并受全站免费预算保护。</p>
       </section>
       <section data-workflow-step="3" hidden><p class="workflow-note">处理期间可以关闭窗口取消等待；已发出的 AI 请求可能已消耗额度。</p></section>
       <section data-workflow-step="5" hidden><p>正文和图形已确认。需要再调整展示吗？</p><p class="workflow-note">精简分支、增加留白、统一图形与正文展示，保留原文、表格和图片。已有分析会复用，不再次调用 AI。</p><button id="workflow-optimize" class="workflow-btn">美观优化并重新预览</button></section>

@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const configPath = resolve(root, 'wrangler.production.jsonc');
-const modes = new Set(['check', 'verify', 'migrate', 'deploy']);
+const modes = new Set(['check', 'verify', 'migrate', 'deploy', 'deploy-vars']);
+const variablePlanPath = resolve(root, '.wrangler/production-vars-change.json');
 const requiredSecrets = ['AUTH_PASSWORD', 'COOKIE_SECRET', 'AGENT_API_TOKEN'];
 
 export function validateProductionConfig(config) {
@@ -61,25 +62,48 @@ export function verifyProductionBindings(config, version) {
 }
 
 // All operations use one explicit config; extra CLI arguments cannot redirect a deploy.
-export function runProduction(mode, config, run) {
-  assert(modes.has(mode), '支持的操作：check、verify、migrate、deploy。');
+export function verifyVariablePlan(config, version, changes) {
+  assert(changes && typeof changes === 'object' && !Array.isArray(changes) && Object.keys(changes).length,
+    '配置变更需要本地 production-vars-change.json 计划。');
+  const bindings = new Map(version.resources.bindings.map(binding => [binding.name, binding]));
+  const baseline = { ...config, vars: { ...config.vars } };
+  for (const [name, change] of Object.entries(changes)) {
+    assert(['DAILY_AI_LIMIT', 'DAILY_AI_NEURON_BUDGET'].includes(name), `不允许通过 AI 额度变更计划修改 ${name}。`);
+    assert(change && (change.from === null || typeof change.from === 'string') && typeof change.to === 'string'
+      && change.to === config.vars[name], `${name} 的变更计划与本地目标配置不一致。`);
+    const binding = bindings.get(name);
+    assert(change.from === null ? !binding : binding?.type === 'plain_text' && binding.text === change.from,
+      `${name} 的线上值已变化，停止配置变更。`);
+    if (change.from === null) delete baseline.vars[name];
+    else baseline.vars[name] = change.from;
+  }
+  assert(Number.isInteger(Number(config.vars.DAILY_AI_LIMIT)) && Number(config.vars.DAILY_AI_LIMIT) > 0,
+    'AI 次数上限必须是正整数。');
+  assert(Number(config.vars.DAILY_AI_NEURON_BUDGET) > 0 && Number(config.vars.DAILY_AI_NEURON_BUDGET) <= 10000,
+    '免费 AI 预算必须在 0–10000 Neurons 之间。');
+  verifyProductionBindings(baseline, version);
+}
+
+export function runProduction(mode, config, run, variableChanges) {
+  assert(modes.has(mode), '支持的操作：check、verify、migrate、deploy、deploy-vars。');
   validateProductionConfig(config);
   const invoke = (args, json = false) => run([...args, '--config', configPath], json);
-  if (mode === 'check' || mode === 'deploy') invoke(['deploy', '--dry-run']);
+  if (mode === 'check' || mode === 'deploy' || mode === 'deploy-vars') invoke(['deploy', '--dry-run']);
   if (mode === 'check') return;
 
   const deployment = invoke(['deployments', 'status', '--json'], true);
   assert(deployment.versions?.length === 1 && deployment.versions[0].percentage === 100,
     '线上存在多版本流量分配，必须先人工核对，禁止直接覆盖。');
   const version = invoke(['versions', 'view', deployment.versions[0].version_id, '--json'], true);
-  verifyProductionBindings(config, version);
+  if (mode === 'deploy-vars') verifyVariablePlan(config, version, variableChanges);
+  else verifyProductionBindings(config, version);
   console.log('生产变量、资源绑定、Secrets 名称和运行时兼容配置核对通过。');
   if (mode === 'verify') {
     invoke(['d1', 'migrations', 'list', 'DB', '--remote']);
     return;
   }
   invoke(['d1', 'migrations', 'apply', 'DB', '--remote']);
-  if (mode === 'deploy') invoke(['deploy']);
+  if (mode === 'deploy' || mode === 'deploy-vars') invoke(['deploy']);
 }
 
 async function main() {
@@ -89,7 +113,9 @@ async function main() {
   const config = unstable_readConfig({ config: configPath });
   const require = createRequire(import.meta.url);
   const wrangler = resolve(dirname(require.resolve('wrangler/package.json')), 'bin/wrangler.js');
-  runProduction(process.argv[2], config, (args, json) => {
+  const mode = process.argv[2];
+  const changes = mode === 'deploy-vars' ? JSON.parse(readFileSync(variablePlanPath, 'utf8')) : undefined;
+  runProduction(mode, config, (args, json) => {
     const output = execFileSync(process.execPath, [wrangler, ...args], {
       cwd: root,
       env: { ...process.env, CLOUDFLARE_ACCOUNT_ID: config.account_id },
@@ -97,7 +123,8 @@ async function main() {
       encoding: 'utf8',
     });
     return json ? JSON.parse(output) : undefined;
-  });
+  }, changes);
+  if (mode === 'deploy-vars') unlinkSync(variablePlanPath);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

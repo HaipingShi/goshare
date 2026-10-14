@@ -22,7 +22,7 @@ AI 目录支持搜索、折叠和阅读位置提示；导图支持缩放、重�
 
 成功响应包含 `analysis.title`、`analysis.summary`、`analysis.nodes`、`analysis.nodeCount` 和 `quota`。每个节点包含 `title`、`summary`、`blockId`、`children`。客户端维护原文块与 DOM 元素的对应关系，节点无法跳到模型指定的任意页面。
 
-复用 `AI_ENABLED`、`AI_BEAUTIFY_MODEL`、`DAILY_AI_LIMIT` 和 `AI` binding，无需新增生产 Secret 或数据库迁移。与智能美化共用访问者每日 AI 额度，模型调用失败也可能消耗一次额度。`AUTH_ENABLED=true` 时接口沿用站点登录校验；首页沙箱预览通过父页面发起请求，以保留登录 Cookie。
+复用 `AI_ENABLED`、`AI_BEAUTIFY_MODEL` 和 `AI` binding；通过 `DAILY_AI_LIMIT` 与智能美化、分享卡片 AI 共用访问者每日成功次数。失败不扣个人次数，但实际或无法确认的计算消耗仍计入全站 `DAILY_AI_NEURON_BUDGET`。需应用 `0007_add_ai_budget.sql` 迁移，无需新增 Secret。详见 [AI 额度保护](AI_QUOTAS.md)。`AUTH_ENABLED=true` 时接口沿用站点登录校验；首页沙箱预览通过父页面发起请求，以保留登录 Cookie。
 
 ## 输入和结果限制
 

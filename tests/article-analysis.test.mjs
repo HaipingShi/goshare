@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import worker from '../src/worker.js';
 import { validateArticleBlocks, validateArticleAnalysis, buildArticleAnalysisPrompt } from '../src/article-analysis.js';
+import { quotaDatabase } from './fixtures/d1.mjs';
 
 const blocks = [{ id: 'block-1', text: '学习从理解问题开始。' }, { id: 'block-2', text: '实践与复盘帮助形成可迁移的经验。' }];
 const analysis = { title: '学习方法', summary: '以问题为起点，通过实践和复盘积累经验。', nodes: [
@@ -50,11 +52,17 @@ function environment(overrides = {}) {
   let calls = 0;
   const env = {
     AUTH_ENABLED: 'false', AI_ENABLED: 'true', DAILY_AI_LIMIT: '0',
-    DB: { prepare() { return { bind() { return this; }, first: async () => ({ count: 3 }), run: async () => ({}) }; } },
+    DB: quotaDatabase(),
     CONTENT_BUCKET: {}, AI: { async run() { calls++; return { response: JSON.stringify(analysis) }; } },
     ...overrides,
   };
+  if (overrides.DAILY_AI_LIMIT === '3' && env.DB.sqlite) env.DB.sqlite.prepare('INSERT INTO ai_daily_usage (scope, day, used) VALUES (?, ?, 3)').run(
+    `ai:${fixtureScopeHash()}`, new Date().toISOString().slice(0, 10));
   return { env, calls: () => calls };
+}
+function fixtureScopeHash() {
+  // The fixture request has no IP, user agent, or language headers.
+  return createHash('sha256').update('goshare:::').digest('hex');
 }
 function request(body = { blocks }) {
   return new Request('https://example.com/api/pages/article-analysis', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -94,4 +102,21 @@ test('model failures and invented references return a recoverable error', async 
   assert.equal(response.status, 502);
   assert.equal(result.error.code, 'AI_ANALYSIS_FAILED');
   assert.equal(result.error.retryable, true);
+});
+
+test('API uses success-only quotas, meters generic beautification, and exposes both guards', async () => {
+  const { env } = environment({ DAILY_AI_LIMIT: '50', AI: { async run() {
+    return { response: JSON.stringify({ codeType: 'html', content: '<h1>有效内容</h1>' }), usage: { neurons: 2 } };
+  } } });
+  const beautify = () => new Request('https://example.com/api/pages/beautify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ htmlContent: '<p>内容</p>', codeType: 'html' }) });
+  const success = await worker.fetch(beautify(), env);
+  assert.equal(success.status, 200);
+  assert.equal((await success.json()).quota.used, 1);
+  const failure = await worker.fetch(request(), env); // beautification output is not a valid article outline
+  assert.equal(failure.status, 502);
+  const state = await (await worker.fetch(new Request('https://example.com/api/v1/quota'), env)).json();
+  assert.equal(state.quotas.ai.limit, 50);
+  assert.equal(state.quotas.ai.used, 1);
+  assert.equal(state.quotas.ai.remaining, 49);
+  assert.equal(state.quotas.aiBudget.used, 4);
 });
