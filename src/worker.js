@@ -1,6 +1,7 @@
+import { extractArticleSource } from './article-source.js';
 import * as fflate from 'fflate';
 import { sanitizeDocxContent } from './docx-content.js';
-import { validateArticleBlocks, buildArticleAnalysisPrompt, validateArticleAnalysis } from './article-analysis.js';
+import { validateArticleBlocks, buildArticleAnalysisPrompt, validateArticleAnalysis, validateDiagramKinds, validateArticleDiagrams, ARTICLE_PROMPT_VERSION } from './article-analysis.js';
 import {
   renderErrorPage,
   renderAdminPage,
@@ -130,6 +131,19 @@ async function handleRequest(request, env) {
   if (pathname === '/api/pages/beautify' && request.method === 'POST') {
     if (!(await isAuthenticated(request, env))) return unauthorizedJson();
     return beautifyPage(request, env);
+  }
+
+  if (pathname === '/api/pages/article-source' && request.method === 'POST') {
+    if (!(await isAuthenticated(request, env))) return unauthorizedJson();
+    const payload = await readJsonPayload(request);
+    if (!payload.ok) return payload.response;
+    const input = parseTextContentPayload(payload.data);
+    if (!input.ok) return input.response;
+    if (![CODE_TYPES.DOCX, CODE_TYPES.MARKDOWN].includes(input.codeType)) return apiErrorResponse({ code: 'INVALID_REQUEST', message: '请选择 DOCX、Markdown 或纯文本文章。', status: 400 });
+    if (input.content.length > MAX_CONTENT_LENGTH) return apiErrorResponse({ code: 'TOO_LARGE', message: '文章过大。', status: 413 });
+    const rendered = await renderContent(input.content, input.codeType, { markdownTheme: input.markdownTheme });
+    const source = extractArticleSource(rendered);
+    return jsonResponse({ success: true, ...source });
   }
 
   if (pathname === '/api/pages/article-analysis' && request.method === 'POST') {
@@ -1028,6 +1042,7 @@ async function previewPage(request, env) {
   const normalized = normalizeContentForRendering(input.content, input.codeType);
   const renderedContent = await renderContent(normalized.content, normalized.contentType, {
     markdownTheme: input.markdownTheme,
+    previewMode: true,
     aiAnalysisEnabled: String(env.AI_ENABLED || 'true').toLowerCase() !== 'false' && Boolean(env.AI),
   });
   const html = injectCodeTypeMeta(renderedContent, normalized.contentType || input.codeType);
@@ -1089,7 +1104,7 @@ async function beautifyPage(request, env) {
         },
       ],
       temperature: 0.35,
-      max_completion_tokens: 4096,
+      max_completion_tokens: diagramKinds.some(kind => kind !== 'mindmap') ? 6144 : 4096,
     });
   } catch (error) {
     console.error('AI beautify failed:', error);
@@ -1131,7 +1146,9 @@ async function analyzeArticle(request, env) {
   const payload = await readJsonPayload(request);
   if (!payload.ok) return payload.response;
   let blocks;
+  let diagramKinds;
   try {
+    diagramKinds = validateDiagramKinds(payload.data?.diagramKinds);
     blocks = validateArticleBlocks(payload.data?.blocks);
   } catch (error) {
     return apiErrorResponse({ code: error instanceof RangeError ? 'TOO_LARGE' : 'INVALID_REQUEST', message: error.message, status: error instanceof RangeError ? 413 : 400 });
@@ -1143,7 +1160,7 @@ async function analyzeArticle(request, env) {
     const result = await env.AI.run(model, {
       messages: [
         { role: 'system', content: 'You analyze articles into evidence-grounded semantic trees. Return only valid JSON.' },
-        { role: 'user', content: buildArticleAnalysisPrompt(blocks) },
+        { role: 'user', content: buildArticleAnalysisPrompt(blocks, diagramKinds.filter(kind => kind !== 'mindmap')) },
       ],
       temperature: 0.2,
       max_completion_tokens: 4096,
@@ -1153,7 +1170,10 @@ async function analyzeArticle(request, env) {
       } : {}),
     });
     const raw = stripMarkdownFence(extractAiText(result));
-    const analysis = validateArticleAnalysis(JSON.parse(raw), blocks);
+    const parsed = JSON.parse(raw);
+    const analysis = validateArticleAnalysis(parsed, blocks);
+    analysis.diagrams = diagramKinds.some(kind => kind !== 'mindmap') ? validateArticleDiagrams(parsed.diagrams, blocks, diagramKinds) : [];
+    analysis.promptVersion = ARTICLE_PROMPT_VERSION;
     return jsonResponse({ success: true, analysis, quota: quotaSummary(quota) });
   } catch (error) {
     console.error('AI article analysis failed:', error?.name || 'Error');

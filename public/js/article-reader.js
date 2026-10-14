@@ -11,33 +11,8 @@
     return roots;
   }
 
-  function diagramLabel(text) {
-    return String(text).replace(/\s+/g, ' ').trim().slice(0, 100)
-      .replace(/&/g, '#38;').replace(/"/g, '#quot;').replace(/</g, '#60;').replace(/>/g, '#62;');
-  }
-
-  function buildMindmap(roots, title, limit = 120) {
-    // Breadth-first selection retains top-level branches before deep detail.
-    const included = new Set();
-    const pending = [...roots];
-    let count = 0;
-    for (let index = 0; index < pending.length && count < limit; index++) {
-      const node = pending[index];
-      included.add(node.id);
-      count++;
-      pending.push(...node.children);
-    }
-    const lines = ['mindmap', `  root(("${diagramLabel(title || '文章结构')}"))`];
-    let index = 0;
-    function walk(nodes, depth) {
-      nodes.forEach((node) => {
-        if (!included.has(node.id)) return;
-        lines.push(`${'  '.repeat(depth)}n${++index}["${diagramLabel(node.text)}"]`);
-        walk(node.children, depth + 1);
-      });
-    }
-    walk(roots, 2);
-    return { source: lines.join('\n'), count };
+  function buildMindmap(roots, title, limit = 24) {
+    return GoshareGraphs.buildMindmap(roots, title, limit);
   }
 
   globalThis.GoshareArticle = { buildOutline, buildMindmap };
@@ -71,7 +46,7 @@
     const headingRoots = roots;
     const sourceBlocks = new Map();
     const blocks = [...article.children].map((element, index) => {
-      if (['SCRIPT', 'STYLE'].includes(element.tagName)) return null;
+      if (['SCRIPT', 'STYLE'].includes(element.tagName) || element.matches('[data-goshare-analysis], [data-goshare-diagram], [data-generated-diagram]')) return null;
       const clone = element.cloneNode(true);
       clone.querySelectorAll('script,style').forEach((node) => node.remove());
       const bodyText = element.classList.contains('diagram-card')
@@ -279,7 +254,9 @@
       const flattened = [];
       let sequence = 0;
       function convert(nodes, level) {
+        if (!Array.isArray(nodes) || level > 4 || sequence + nodes.length > 60) throw new Error('保存的目录结构超过限制。');
         return nodes.map((node) => {
+          if (typeof node?.title !== 'string' || typeof node?.summary !== 'string') throw new Error('保存的目录格式无效。');
           const element = sourceBlocks.get(node.blockId);
           if (!element) throw new Error('AI 目录引用了不存在的原文段落。');
           const entry = { id: `article-ai-node-${++sequence}`, targetId: element.id, text: node.title, summary: node.summary, level, element, children: [] };
@@ -342,6 +319,17 @@
         aiButton.textContent = cachedAnalysis ? 'AI 目录' : 'AI 分析全文';
       }
     });
+    const saved = article.querySelector('pre[data-goshare-analysis="v1"]');
+    if (saved) {
+      saved.hidden = true;
+      try { cachedAnalysis = JSON.parse(saved.textContent); applyAnalysis(cachedAnalysis); aiButton.textContent = 'AI 目录'; aiStatus.textContent = '已载入保存的 AI 分析'; }
+      catch { cachedAnalysis = undefined; aiStatus.textContent = '保存的目录无效，可重新分析。'; }
+    }
+    const sendBlocks = () => {
+      if (parent !== window && location.href === 'about:srcdoc') parent.postMessage({ type: 'goshare:article-ready', blocks }, '*');
+    };
+    window.addEventListener('message', event => { if (event.source === parent && event.data?.type === 'goshare:request-article-blocks') sendBlocks(); });
+    sendBlocks();
     headingButton.addEventListener('click', () => applyOutline(headingRoots, headingRecords, '', false));
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });

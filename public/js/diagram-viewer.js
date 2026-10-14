@@ -18,8 +18,9 @@
               startOnLoad: false,
               securityLevel: 'strict',
               suppressErrorRendering: true,
-              theme: document.body.classList.contains('markdown-page-slate') || matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default',
-              flowchart: { useMaxWidth: true, htmlLabels: false },
+              theme: 'base',
+              themeVariables: { primaryColor: '#eef4fb', primaryTextColor: '#20334d', primaryBorderColor: '#9ab0c9', lineColor: '#7890a8', secondaryColor: '#f3f7fb', tertiaryColor: '#f8fafc', fontFamily: 'system-ui, sans-serif' },
+              flowchart: { useMaxWidth: true, htmlLabels: false, nodeSpacing: 30, rankSpacing: 55, curve: 'linear' },
             });
             return mermaid;
           } catch (error) {
@@ -57,7 +58,8 @@
     const figure = document.createElement('figure');
     figure.className = 'diagram-card';
     const caption = document.createElement('figcaption');
-    caption.textContent = /^mindmap\b/.test(source) ? '思维导图' : 'Mermaid 图表';
+    if (node.dataset.goshareDiagram) figure.dataset.generatedDiagram = node.dataset.goshareDiagram;
+    caption.textContent = GoshareGraphs?.GRAPH_LABELS?.[node.dataset.goshareDiagram] || (/^mindmap\b/.test(source) ? '思维导图' : 'Mermaid 图表');
     const stage = document.createElement('div');
     stage.className = 'diagram-stage';
     stage.setAttribute('aria-label', caption.textContent);
@@ -96,18 +98,23 @@
       }
     }
     retry.addEventListener('click', draw);
-    draw();
+    return draw();
   }
 
   window.GoshareDiagrams = { render };
-  function start() {
+  async function start() {
     document.querySelectorAll('pre code.language-mermaid').forEach((code) => {
       const node = document.createElement('div');
       node.className = 'mermaid';
       node.textContent = code.textContent;
       code.parentElement.replaceWith(node);
     });
-    document.querySelectorAll('.mermaid').forEach(setupDiagram);
+    const nodes = [...document.querySelectorAll('pre[data-goshare-diagram], .mermaid')];
+    await Promise.allSettled(nodes.map(setupDiagram));
+    if (parent !== window && location.href === 'about:srcdoc') {
+      parent.postMessage({ type: 'goshare:diagrams-ready', requestId: document.querySelector('meta[name="goshare-preview-id"]')?.content,
+        errors: document.querySelectorAll('.diagram-card[data-rendered="error"]').length }, '*');
+    }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true });
   else start();

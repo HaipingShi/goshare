@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { detectCodeType, renderContent } from '../src/renderers.js';
 
 const context = vm.createContext({});
+vm.runInContext(readFileSync(new URL('../public/js/article-graphs.js', import.meta.url), 'utf8'), context);
 vm.runInContext(readFileSync(new URL('../public/js/article-reader.js', import.meta.url), 'utf8'), context);
 const { buildOutline, buildMindmap } = context.GoshareArticle;
 
@@ -25,7 +26,7 @@ test('outline handles skipped heading levels, repeated titles, and sibling secti
 test('mindmap labels cannot inject diagram nodes or markup', () => {
   const roots = buildOutline([{ id: 'one', text: '标题 "引号" <img> & 内容\n新行', level: 2 }]);
   const map = buildMindmap(roots, '目录');
-  assert.equal(map.source.split('\n').length, 3);
+  assert.match(map.source, /^flowchart LR/);
   assert.match(map.source, /#quot;引号#quot;/);
   assert.match(map.source, /#60;img#62;/);
   assert(!map.source.includes('<img>'));
@@ -40,7 +41,7 @@ test('large mindmaps retain broad branches before deep children', () => {
     parent = child;
   }
   const map = buildMindmap([first, { id: 'last', text: '最后一章', level: 2, children: [] }], '文章', 120);
-  assert.equal(map.count, 120);
+  assert.equal(map.count, 4);
   assert.match(map.source, /最后一章/);
   assert(!map.source.includes('深层节点 129'));
 });

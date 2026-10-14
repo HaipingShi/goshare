@@ -405,7 +405,7 @@ function renderMarkdown(content, theme, options = {}) {
   </style>
   ${mermaidRuntimeScript()}
 </head>
-<body class="markdown-page markdown-page-${markdownTheme}">
+<body class="markdown-page markdown-page-${markdownTheme}${options.previewMode ? ' workflow-preview' : ''}">
   ${articleReaderShell(htmlContent, `markdown-body markdown-theme-${markdownTheme}`, options.aiAnalysisEnabled !== false)}
   <script src="/js/article-reader.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
@@ -689,7 +689,8 @@ function viewerIcons() {
 }
 
 function mermaidRuntimeScript() {
-  return '<script src="/js/diagram-viewer.js" defer></script>';
+  return `<script src="/js/article-graphs.js" defer></script>
+  <script src="/js/diagram-viewer.js" defer></script>`;
 }
 
 function articleReaderShell(content, className, aiEnabled) {

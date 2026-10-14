@@ -1,0 +1,23 @@
+#article-workflow-dialog { width: min(640px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow: auto; padding: 28px; border: 1px solid #cad5e4; border-radius: 18px; background: #fff; color: #233552; box-shadow: 0 24px 80px #101b3640; font-family: system-ui, sans-serif; }
+#article-workflow-dialog::backdrop { background: #17233e9c; }
+#article-workflow-dialog [hidden], #workflow-review[hidden] { display: none !important; }
+.workflow-heading { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.workflow-heading h2 { font-size: 22px; margin: 8px 0 18px; }
+#workflow-step-label { color: #61718b; font-size: 13px; }
+.workflow-choice { display: flex; align-items: start; gap: 12px; padding: 14px; border: 1px solid #dbe2ed; border-radius: 12px; margin: 10px 0; cursor: pointer; background: #f8fafd; }
+.workflow-choice input { margin: 4px 0 0; accent-color: #446eab; }
+.workflow-choice strong { display: block; margin-bottom: 5px; font-size: 15px; }
+.workflow-choice span { color: #60718c; font-size: 13px; line-height: 1.65; }
+.workflow-choice:has(input:checked) { border-color: #7293c2; background: #edf3fc; }
+.workflow-choice:has(input:disabled) { opacity: .5; cursor: default; }
+.workflow-note { color: #65758b; font-size: 13px; line-height: 1.75; }
+.workflow-actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 20px; }
+.workflow-btn { padding: 10px 16px; border-radius: 9px; border: 1px solid #b9c9df; background: #f5f8fc; color: #2c466b; font: inherit; font-size: 14px; cursor: pointer; }
+.workflow-btn.primary { background: #3f659d; color: #fff; border-color: #3f659d; }
+.workflow-btn:focus-visible { outline: 3px solid #abc4e8; outline-offset: 3px; }
+#workflow-status { font-size: 14px; line-height: 1.7; color: #41628b; min-height: 24px; }
+#workflow-review { padding: 16px 20px; background: #f0f5fd; border: 1px solid #c8d8ef; border-radius: 12px; color: #233552; margin: 12px 0; }
+#workflow-review p { margin: 0 0 10px; font-size: 14px; }
+#workflow-graph-note { white-space: pre-wrap; }
+#workflow-summary { font-size: 13px; color: var(--text-secondary); padding: 4px 0; }
+@media (max-width: 600px) { #article-workflow-dialog { padding: 20px; } .workflow-actions { flex-wrap: wrap; } }

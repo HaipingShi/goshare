@@ -15,6 +15,7 @@ export function sanitizeDocxContent(content) {
       a: ['href', 'id'], ol: ['start'], li: ['value', 'id'],
       th: ['colspan', 'rowspan', 'scope'], td: ['colspan', 'rowspan'],
       img: ['src', 'alt', 'title'],
+      pre: ['hidden', { name: 'data-goshare-analysis', values: ['v1'] }, { name: 'data-goshare-diagram', values: ['mindmap', 'flowchart', 'architecture'] }],
     },
     allowedSchemes: ['https', 'http', 'mailto'],
     allowedSchemesByTag: { img: ['data'] },

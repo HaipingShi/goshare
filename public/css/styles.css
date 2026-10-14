@@ -2695,3 +2695,5 @@ label[for="html-file"] {
 }
 /* Import warnings should not leave an empty card while hidden. */
 #docx-import-notice[hidden] { display: none !important; }
+
+#beautify-button[hidden] { display: none !important; }

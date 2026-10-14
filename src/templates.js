@@ -173,7 +173,7 @@ function chromeEnd({ includeMain = true, includeAdminLink = false, includeAdmin 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/html.min.js"></script>
   <script src="/js/theme.js"></script>
   <script src="/js/particles-config.js"></script>
-  ${includeMain ? '<script src="/js/main.js?v=cloudflare"></script><script src="/js/syntax-highlight.js"></script>' : ''}
+  ${includeMain ? '<script src="/js/article-graphs.js"></script><script src="/js/article-workflow.js"></script><script src="/js/main.js?v=workflow-v2"></script><script src="/js/syntax-highlight.js"></script>' : ''}
   ${includeAdmin ? '<script src="/js/admin.js?v=cloudflare"></script>' : ''}
 </body>
 </html>`;
@@ -207,7 +207,7 @@ function appFooter(env) {
 
 export function renderIndexPage(env) {
   const config = getAppConfig(env);
-  return `${chromeStart(`${config.appName} | 分享 HTML 代码的简单方式`, { env })}
+  return `${chromeStart(`${config.appName} | 分享 HTML 代码的简单方式`, { env, extraHead: '<link rel="stylesheet" href="/css/article-workflow.css">' })}
 <div class="main-container">
   ${appHeader(env)}
   <div class="content-area">
@@ -217,22 +217,13 @@ export function renderIndexPage(env) {
           <div class="spinner"></div>
           <span>处理中...</span>
         </div>
-        <div id="code-input-container" role="tabpanel">
-          <div id="code-type-indicator" class="code-type-indicator html-type">
-            <i class="fas fa-code"></i>
-            <span id="code-type-text">HTML</span>
-          </div>
-          <textarea id="html-input" class="cyber-input" placeholder="在这里粘贴你的 HTML/Markdown/SVG/Mermaid 代码..." aria-label="HTML 代码输入区域"></textarea>
-        </div>
-        <div style="display: none;">
-          <input id="html-file" type="file" class="hidden" accept=".html,.htm,.md,.markdown,.svg,.txt,.zip,.docx" aria-label="上传文件" />
-          <p id="file-name" class="mt-3" style="color: var(--primary);"></p>
-        </div>
         <div class="input-actions">
           <div class="input-actions-left">
             <label for="html-file" class="cyber-btn cyber-btn-secondary tooltip micro-interaction" data-tooltip="上传 DOCX/HTML/ZIP/Markdown/SVG 文件" aria-label="上传文件">
               <i class="fas fa-file-upload mr-1" aria-hidden="true"></i>上传文件
             </label>
+            <button id="workflow-ai-open" type="button" class="cyber-btn cyber-btn-secondary" disabled>AI 分析</button>
+            <button id="workflow-graphs-open" type="button" class="cyber-btn cyber-btn-secondary" disabled>图形选择</button>
             <label class="markdown-theme-control" for="markdown-theme-select">
               <span>Markdown 模板</span>
               <select id="markdown-theme-select" class="markdown-theme-select" disabled>
@@ -265,8 +256,41 @@ export function renderIndexPage(env) {
             </button>
           </div>
         </div>
+        <div id="code-input-container" role="tabpanel">
+          <div id="code-type-indicator" class="code-type-indicator html-type">
+            <i class="fas fa-code"></i>
+            <span id="code-type-text">HTML</span>
+          </div>
+          <textarea id="html-input" class="cyber-input" placeholder="在这里粘贴你的 HTML/Markdown/SVG/Mermaid 代码..." aria-label="HTML 代码输入区域"></textarea>
+        </div>
+        <div style="display: none;">
+          <input id="html-file" type="file" class="hidden" accept=".html,.htm,.md,.markdown,.svg,.txt,.zip,.docx" aria-label="上传文件" />
+          <p id="file-name" class="mt-3" style="color: var(--primary);"></p>
+        </div>
+
       </div>
     </div>
+    <dialog id="article-workflow-dialog" aria-labelledby="workflow-title" data-ai-enabled="${String(env.AI_ENABLED || 'true').toLowerCase() !== 'false' && Boolean(env.AI)}">
+      <div class="workflow-heading"><div><span id="workflow-step-label"></span><h2 id="workflow-title">文件上传成功</h2></div><button id="workflow-close" class="workflow-btn" aria-label="关闭工作流">关闭</button></div>
+      <section data-workflow-step="0"><p id="workflow-file-label"></p><p id="workflow-upload-note" class="workflow-note"></p></section>
+      <section data-workflow-step="1" hidden>
+        <label class="workflow-choice"><input id="workflow-ai-yes" name="workflow-ai" type="radio" value="yes" checked><div><strong>需要 AI 分析</strong><span>提炼全文主题、摘要与原文节点，供目录和图形使用。</span></div></label>
+        <label class="workflow-choice"><input id="workflow-ai-no" name="workflow-ai" type="radio" value="no"><div><strong>直接使用原文</strong><span>保留原文标题目录，可生成标题思维导图，不调用 AI。</span></div></label>
+        <p id="workflow-format-note" class="workflow-note" hidden>AI 文章流程支持 DOCX、Markdown 和纯文本；当前格式可直接预览。</p>
+        <p id="workflow-ai-disabled" class="workflow-note" hidden>当前环境未启用 AI，可选择直接使用原文。</p>
+      </section>
+      <section data-workflow-step="2" hidden>
+        <label class="workflow-choice"><input type="checkbox" name="workflow-diagram" value="mindmap" checked><div><strong>思维导图</strong><span>以主题层级展示文章重点，精简分支、统一配色。</span></div></label>
+        <label class="workflow-choice"><input type="checkbox" name="workflow-diagram" value="flowchart"><div><strong>流程图 · 需要 AI</strong><span>提炼原文中的步骤、判断和依赖，不把目录顺序当作流程。</span></div></label>
+        <label class="workflow-choice"><input type="checkbox" name="workflow-diagram" value="architecture"><div><strong>架构图 · 需要 AI</strong><span>展示原文中的组成、边界和依赖。没有依据时不生成。</span></div></label>
+        <p class="workflow-note">可多选或全部取消。图形会插入正文 HTML，并随分享保存。AI 分析与关系图合并为一次调用，使用站点每日 AI 额度。</p>
+      </section>
+      <section data-workflow-step="3" hidden><p class="workflow-note">处理期间可以关闭窗口取消等待；已发出的 AI 请求可能已消耗额度。</p></section>
+      <section data-workflow-step="5" hidden><p>正文和图形已确认。需要再调整展示吗？</p><p class="workflow-note">精简分支、增加留白、统一图形与正文展示，保留原文、表格和图片。已有分析会复用，不再次调用 AI。</p><button id="workflow-optimize" class="workflow-btn">美观优化并重新预览</button></section>
+      <p id="workflow-status" role="status" aria-live="polite"></p>
+      <div class="workflow-actions"><button id="workflow-back" class="workflow-btn">上一步</button><button id="workflow-next" class="workflow-btn primary">继续</button></div>
+    </dialog>
+    <p id="workflow-summary" role="status"></p>
     <div id="result-section" class="card result-card" style="display: none;" aria-live="polite">
       <h3 class="section-title" style="color: var(--primary); font-family: 'Orbitron', sans-serif; margin-bottom: 1rem;">链接已生成</h3>
       <div id="result-meta" class="result-meta" style="display: none;"></div>
@@ -329,6 +353,7 @@ export function renderIndexPage(env) {
           </button>
         </div>
       </div>
+      <div id="workflow-review" hidden><p>请核对正文、表格、图片和图形。确认后再生成分享链接。</p><p id="workflow-graph-note"></p><button id="workflow-confirm-preview" class="workflow-btn primary">确认预览</button> <button id="workflow-edit-options" class="workflow-btn">修改分析与图形选项</button></div>
       <iframe id="render-preview-frame" class="render-preview-frame" title="渲染预览" sandbox="allow-scripts"></iframe>
     </div>
     <div class="card instructions-card">

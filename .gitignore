@@ -59,3 +59,4 @@ Thumbs.db
 
 # Browser DOCX parser built from locked npm dependencies
 public/js/docx-import.js
+public/js/article-graphs.js

@@ -101,3 +101,13 @@
 }
 .reader-layout [data-article-content] img { max-width: 100%; height: auto; }
 .reader-layout [data-article-content] table { display: block; max-width: 100%; overflow-x: auto; }
+
+.diagram-stage, .reader-map-viewport { background: #f8fafc; border-radius: 8px; }
+.diagram-stage { padding: 18px; }
+.diagram-card[data-generated-diagram] figcaption { font-size: 15px; color: var(--reader-text); }
+pre[data-goshare-analysis], pre[data-goshare-diagram] { display: none; }
+.reader-map-stage svg { min-width: 620px; max-height: none; }
+@media (max-width: 700px) { .diagram-stage { padding: 12px; } .diagram-stage svg { min-width: 560px; max-width: none; } }
+
+.workflow-preview :is(#article-ai-analyze, #article-map-open, #article-heading-mode) { display: none !important; }
+.diagram-stage svg .flowchart-link, .reader-map-stage svg .flowchart-link { fill: none !important; }

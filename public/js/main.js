@@ -116,6 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let previewContent = '';
   let previewCodeType = '';
   let previewMarkdownTheme = '';
+  let previewSequence = 0;
 
   function copyTextToClipboard(text) {
     try {
@@ -313,6 +314,11 @@ curl -X POST "${endpoint}" \\
   function syncMarkdownThemeControl(codeType) {
     if (!markdownThemeSelect) return;
     const enabled = isMarkdownType(codeType) && !uploadedZipContent;
+    ['workflow-ai-open', 'workflow-graphs-open'].forEach(id => {
+      const button = document.getElementById(id);
+      if (button) button.disabled = !htmlInput?.value.trim() || htmlInput.disabled || Boolean(uploadedZipContent);
+    });
+    if (beautifyButton) beautifyButton.hidden = enabled;
     markdownThemeSelect.disabled = !enabled;
   }
 
@@ -335,7 +341,17 @@ curl -X POST "${endpoint}" \\
     };
   }
 
+  const workflow = window.GoshareWorkflow?.create({
+    getPayload: collectTextPayload,
+    applyContent(content, codeType) { htmlInput.value = content; uploadedCodeTypeOverride = codeType; invalidatePreview(); syncToTextarea(); },
+    renderPreview,
+    setConfirmed(value) { if (generateButton) generateButton.disabled = !value; },
+    setTheme(value) { if (markdownThemeSelect) markdownThemeSelect.value = value; },
+    aiEnabled: document.getElementById('article-workflow-dialog')?.dataset.aiEnabled === 'true',
+  });
+
   function invalidatePreview() {
+    previewSequence++;
     previewReady = false;
     previewContent = '';
     previewCodeType = '';
@@ -357,7 +373,7 @@ curl -X POST "${endpoint}" \\
     previewContent = htmlInput ? htmlInput.value.trim() : '';
     previewCodeType = codeType;
     previewMarkdownTheme = markdownTheme;
-    if (generateButton) generateButton.disabled = false;
+    if (generateButton) generateButton.disabled = isMarkdownType(codeType);
     if (beautifyButton) beautifyButton.disabled = Boolean(uploadedZipContent) || codeType === 'docx';
   }
 
@@ -380,7 +396,8 @@ curl -X POST "${endpoint}" \\
     }
   });
 
-  async function renderPreview() {
+  async function renderPreview(options = {}) {
+    const generation = ++previewSequence;
     syncToTextarea();
 
     if (uploadedZipContent) {
@@ -410,13 +427,37 @@ curl -X POST "${endpoint}" \\
       });
       const data = await response.json();
       if (!response.ok || !data.success) throw new Error(getApiErrorMessage(data, '预览失败'));
+      if (generation !== previewSequence) return false;
 
-      showPreview(data.html, data.codeType || payload.codeType, undefined, data.markdownTheme || payload.markdownTheme);
+      const articlePreview = isMarkdownType(data.codeType || payload.codeType);
+      const previewId = `preview-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const ready = articlePreview ? new Promise(resolve => {
+        function finish(result) { clearTimeout(timer); window.removeEventListener('message', receive); resolve(result); }
+        function receive(event) {
+          if (event.source === renderPreviewFrame.contentWindow && event.data?.type === 'goshare:diagrams-ready' && event.data.requestId === previewId) finish(event.data);
+        }
+        const timer = setTimeout(() => finish({ timedOut: true }), 45000);
+        window.addEventListener('message', receive);
+      }) : Promise.resolve({});
+      const html = articlePreview ? data.html.replace('</head>', `<meta name="goshare-preview-id" content="${previewId}"></head>`) : data.html;
+      showPreview(html, data.codeType || payload.codeType, undefined, data.markdownTheme || payload.markdownTheme);
+      if (options.workflow && generateButton) generateButton.disabled = true;
+      if (previewStatus) previewStatus.textContent = '预览启动中…';
+      const rendered = await ready;
+      if (generation !== previewSequence) return false;
+      if (rendered.timedOut) throw new Error('预览图形加载超时，请检查网络后重新预览。');
+      if (previewStatus) previewStatus.textContent = rendered.errors ? `预览已生成 · ${rendered.errors} 张图形未渲染，请查看错误提示` : '预览已生成';
+      if (!options.workflow && ['markdown', 'docx'].includes(data.codeType || payload.codeType)) workflow?.reviewPreview();
+      return true;
     } catch (error) {
+      if (generation !== previewSequence) return false;
       showErrorToast(error.message || '预览失败');
+      return false;
     } finally {
-      restoreActionButton(previewRenderButton);
-      if (previewRefreshButton) previewRefreshButton.disabled = false;
+      if (generation === previewSequence) {
+        restoreActionButton(previewRenderButton);
+        if (previewRefreshButton) previewRefreshButton.disabled = false;
+      }
     }
   }
 
@@ -534,6 +575,7 @@ curl -X POST "${endpoint}" \\
         htmlInput.disabled = true;
         if (previewRenderButton) previewRenderButton.disabled = true;
         if (beautifyButton) beautifyButton.disabled = true;
+        let importedDocx = false;
         try {
           const { parseDocx } = await import('/js/docx-import.js');
           const result = await parseDocx(await file.arrayBuffer());
@@ -541,6 +583,7 @@ curl -X POST "${endpoint}" \\
           uploadedZipContent = null;
           uploadedCodeTypeOverride = 'docx';
           htmlInput.value = result.html;
+          importedDocx = true;
           syncToTextarea();
           invalidatePreview();
           showSuccessToast('DOCX 解析完成，点击“渲染预览”查看文章和图片');
@@ -558,6 +601,8 @@ curl -X POST "${endpoint}" \\
             hideLoading();
             fileInput.value = '';
             fileInput.disabled = false;
+            syncToTextarea();
+            if (importedDocx) workflow?.startFile(file.name, 'docx');
           }
         }
         return;
@@ -575,17 +620,18 @@ curl -X POST "${endpoint}" \\
           invalidatePreview();
           if (generateButton) generateButton.disabled = false;
           hideLoading();
+          workflow?.startFile(file.name, 'zip');
         };
         reader.readAsDataURL(file);
       } else {
         uploadedZipContent = null;
         
         // 根据后缀名强制指定代码类型，避免自动检测误差
-        if (file.name.endsWith('.md') || file.name.endsWith('.markdown')) {
+        if (/\.(md|markdown|txt)$/.test(name)) {
           uploadedCodeTypeOverride = 'markdown';
-        } else if (file.name.endsWith('.svg')) {
+        } else if (name.endsWith('.svg')) {
           uploadedCodeTypeOverride = 'svg';
-        } else if (file.name.endsWith('.html') || file.name.endsWith('.htm')) {
+        } else if (name.endsWith('.html') || name.endsWith('.htm')) {
           uploadedCodeTypeOverride = 'html';
         } else {
           uploadedCodeTypeOverride = null;
@@ -601,6 +647,7 @@ curl -X POST "${endpoint}" \\
           syncToTextarea();
           invalidatePreview();
           hideLoading();
+          workflow?.startFile(file.name, getCurrentCodeType(content));
         };
         reader.readAsText(file);
       }
@@ -611,6 +658,7 @@ curl -X POST "${endpoint}" \\
   if (clearButton) {
     clearButton.addEventListener('click', () => {
       fileImportSequence++;
+      workflow?.reset();
       if (previewRenderButton) previewRenderButton.disabled = false;
       if (fileInput) { fileInput.value = ''; fileInput.disabled = false; }
       document.getElementById('docx-import-notice').hidden = true;
@@ -952,8 +1000,9 @@ curl -X POST "${endpoint}" \\
   // 在输入框内容变化时检测代码类型并更新高亮
   if (htmlInput) {
     htmlInput.addEventListener('input', () => {
+      workflow?.reset();
       // 手动修改内容时，清除强制指定类型，恢复自动检测
-      if (uploadedCodeTypeOverride !== 'docx') uploadedCodeTypeOverride = null;
+      if (!['docx', 'markdown'].includes(uploadedCodeTypeOverride)) uploadedCodeTypeOverride = null;
       const content = htmlInput.value;
       const codeType = uploadedCodeTypeOverride || detectCodeType(content);
       updateCodeTypeIndicator(codeType, content);
