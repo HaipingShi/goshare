@@ -1511,6 +1511,10 @@ curl -X POST "${endpoint}" \\
   }
   
   // 初始化完成
-  restoreDraft();
+  // A file picker can return before DOMContentLoaded (for example while CDN scripts
+  // load). That change event had no listener yet; consume the selection now.
+  const preselectedFile = fileInput?.files?.[0];
+  if (preselectedFile) importFile(preselectedFile);
+  else restoreDraft();
   console.log('应用初始化完成');
 });

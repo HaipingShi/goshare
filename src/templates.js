@@ -173,7 +173,7 @@ function chromeEnd({ includeMain = true, includeAdminLink = false, includeAdmin 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/html.min.js"></script>
   <script src="/js/theme.js"></script>
   <script src="/js/particles-config.js"></script>
-  ${includeMain ? '<script src="/js/article-graphs.js?v=upload-recovery-v1"></script><script src="/js/article-workflow.js?v=upload-recovery-v1"></script><script src="/js/share-publisher.js?v=upload-recovery-v1"></script><script src="/js/upload-draft.js?v=upload-recovery-v1"></script><script src="/js/main.js?v=upload-recovery-v1"></script><script src="/js/syntax-highlight.js"></script>' : ''}
+  ${includeMain ? '<script src="/js/article-graphs.js?v=upload-recovery-v1"></script><script src="/js/article-workflow.js?v=upload-recovery-v1"></script><script src="/js/share-publisher.js?v=upload-recovery-v1"></script><script src="/js/upload-draft.js?v=upload-recovery-v1"></script><script src="/js/main.js?v=upload-recovery-v2"></script><script src="/js/syntax-highlight.js"></script>' : ''}
   ${includeAdmin ? '<script src="/js/admin.js?v=cloudflare"></script>' : ''}
 </body>
 </html>`;
