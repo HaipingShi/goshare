@@ -336,6 +336,8 @@ npm run capture:screenshots
 
 ## 手动部署
 
+已有生产站点的本地配置与安全部署流程见 [生产部署说明](docs/PRODUCTION.md)。`npm run deploy` 固定使用 Git 忽略的 `wrangler.production.jsonc`，发布前核对线上配置；不会回退到开源模板。首次创建站点请使用下方初始化步骤。
+
 AI agent 默认应该用 Wrangler CLI 创建资源：
 
 ```bash
@@ -345,10 +347,14 @@ npm install
 npx wrangler login
 npx wrangler d1 create goshare-db
 npx wrangler r2 bucket create goshare-content
-npx wrangler secret put AUTH_PASSWORD
-npx wrangler secret put COOKIE_SECRET
-npx wrangler secret put AGENT_API_TOKEN
-npm run deploy
+cp wrangler.jsonc wrangler.production.jsonc
+# 先编辑生产配置，填入真实 account_id、database_id、域名和生产变量。
+npx wrangler secret put AUTH_PASSWORD --config wrangler.production.jsonc
+npx wrangler secret put COOKIE_SECRET --config wrangler.production.jsonc
+npx wrangler secret put AGENT_API_TOKEN --config wrangler.production.jsonc
+# 首次初始化使用显式配置；已有站点日常发布使用上方的保护流程。
+npx wrangler d1 migrations apply DB --remote --config wrangler.production.jsonc
+npx wrangler deploy --config wrangler.production.jsonc
 ```
 
 自定义域名推荐在 Cloudflare 控制台的 **Workers & Pages -> goshare -> Settings -> Domains & Routes** 里绑定。

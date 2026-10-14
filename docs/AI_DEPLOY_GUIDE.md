@@ -1,5 +1,7 @@
 # AI Deploy Guide for goshare
 
+> 已有生产站点的日常发布请使用 [本地生产部署流程](PRODUCTION.md)。以下直接调用 Wrangler 的命令用于首次初始化；执行前先准备好 `wrangler.production.jsonc` 中的真实账号、数据库和域名配置。
+
 这份文件给 AI coding agent 使用，也给第一次接触 Cloudflare 的部署者做解释。目标不是炫技，而是让用户知道每一步在做什么、会创建什么资源、部署完去哪里找自己的站点。
 
 ## 文件索引
@@ -160,11 +162,11 @@ npm install
 npx wrangler login
 npx wrangler d1 create goshare-db
 npx wrangler r2 bucket create goshare-content
-npm run db:migrate:remote
-npx wrangler secret put AUTH_PASSWORD
-npx wrangler secret put COOKIE_SECRET
-npx wrangler secret put AGENT_API_TOKEN
-npx wrangler deploy
+npx wrangler d1 migrations apply DB --remote --config wrangler.production.jsonc
+npx wrangler secret put AUTH_PASSWORD --config wrangler.production.jsonc
+npx wrangler secret put COOKIE_SECRET --config wrangler.production.jsonc
+npx wrangler secret put AGENT_API_TOKEN --config wrangler.production.jsonc
+npx wrangler deploy --config wrangler.production.jsonc
 ```
 
 注意：
@@ -177,22 +179,23 @@ npx wrangler deploy
 使用本地生产配置部署时，命令示例：
 
 ```bash
-npm run db:migrate:remote -- --config wrangler.production.jsonc
+npx wrangler d1 migrations apply DB --remote --config wrangler.production.jsonc
 npx wrangler deploy --config wrangler.production.jsonc
 ```
 
 ## 远端 D1 迁移
 
-部署前或部署后都要确认远端 D1 已应用迁移：
+已有站点可只读检查待应用迁移，并在核对配置后应用：
 
 ```bash
+npm run production:verify
 npm run db:migrate:remote
 ```
 
-如果使用手动命令，也可以等价执行：
+首次初始化尚无已部署版本时，使用显式生产配置执行：
 
 ```bash
-npx wrangler d1 migrations apply goshare-db --remote
+npx wrangler d1 migrations apply DB --remote --config wrangler.production.jsonc
 ```
 
 迁移成功后，D1 应包含短链、Agent run、页面提交、Markdown 模板和安全额度相关表或字段。

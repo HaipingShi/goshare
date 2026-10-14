@@ -1,5 +1,7 @@
 # goshare 开源发布清单
 
+> 已有生产站点的日常发布请使用 [本地生产部署流程](PRODUCTION.md)。以下直接调用 Wrangler 的命令用于首次初始化；执行前先准备好 `wrangler.production.jsonc` 中的真实账号、数据库和域名配置。
+
 ## 发布前必须确认
 
 - 不提交 `.env`、`.dev.vars`、`.wrangler/`、`sessions/`。
@@ -38,8 +40,8 @@ COOKIE_SECRET
 设置命令：
 
 ```bash
-npx wrangler secret put AUTH_PASSWORD
-npx wrangler secret put COOKIE_SECRET
+npx wrangler secret put AUTH_PASSWORD --config wrangler.production.jsonc
+npx wrangler secret put COOKIE_SECRET --config wrangler.production.jsonc
 ```
 
 ## 手动部署流程
@@ -48,10 +50,10 @@ npx wrangler secret put COOKIE_SECRET
 npm install
 npx wrangler d1 create goshare-db
 npx wrangler r2 bucket create goshare-content
-npm run db:migrate:remote
-npx wrangler secret put AUTH_PASSWORD
-npx wrangler secret put COOKIE_SECRET
-npm run deploy
+npx wrangler d1 migrations apply DB --remote --config wrangler.production.jsonc
+npx wrangler secret put AUTH_PASSWORD --config wrangler.production.jsonc
+npx wrangler secret put COOKIE_SECRET --config wrangler.production.jsonc
+npx wrangler deploy --config wrangler.production.jsonc
 ```
 
 部署后在 Cloudflare Dashboard 绑定自己的域名，并将 `PUBLIC_SITE_URL` 改成最终访问地址。

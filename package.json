@@ -9,9 +9,12 @@
     "dev": "wrangler dev --local",
     "check": "wrangler deploy --dry-run",
     "capture:screenshots": "node scripts/capture-readme-screenshots.mjs",
-    "deploy": "npm run db:migrate:remote && wrangler deploy",
+    "test": "node --test",
+    "check:production": "node scripts/production.mjs check",
+    "production:verify": "node scripts/production.mjs verify",
+    "deploy": "node scripts/production.mjs deploy",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
-    "db:migrate:remote": "wrangler d1 migrations apply DB --remote"
+    "db:migrate:remote": "node scripts/production.mjs migrate"
   },
   "keywords": [
     "html",

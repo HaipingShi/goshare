@@ -1,5 +1,7 @@
 # AI Deploy Workflow for goshare
 
+> 已有生产站点的日常发布请使用 [本地生产部署流程](PRODUCTION.md)。以下直接调用 Wrangler 的命令用于首次初始化；执行前先准备好 `wrangler.production.jsonc` 中的真实账号、数据库和域名配置。
+
 这份文件是给 AI coding agent 执行的 workflow。它负责把部署任务拆成可检查、可确认、可交付的阶段；详细解释和排错请查 `docs/AI_DEPLOY_GUIDE.md`。
 
 ## 执行原则
@@ -253,9 +255,9 @@ APP_FOOTER_URL=
 Wrangler CLI 示例：
 
 ```bash
-npx wrangler secret put AUTH_PASSWORD
-npx wrangler secret put COOKIE_SECRET
-npx wrangler secret put AGENT_API_TOKEN
+npx wrangler secret put AUTH_PASSWORD --config wrangler.production.jsonc
+npx wrangler secret put COOKIE_SECRET --config wrangler.production.jsonc
+npx wrangler secret put AGENT_API_TOKEN --config wrangler.production.jsonc
 ```
 
 确认点：
@@ -277,23 +279,13 @@ PUBLIC_SITE_URL:
 
 目标：让生产数据库具备当前版本需要的表和字段。
 
-命令：
+首次初始化使用显式生产配置：
 
 ```bash
-npm run db:migrate:remote
+npx wrangler d1 migrations apply DB --remote --config wrangler.production.jsonc
 ```
 
-使用本地生产配置时：
-
-```bash
-npm run db:migrate:remote -- --config wrangler.production.jsonc
-```
-
-或：
-
-```bash
-npx wrangler d1 migrations apply goshare-db --remote
-```
+已有站点使用 `npm run db:migrate:remote`，先核对线上配置再迁移。
 
 确认点：
 
@@ -311,17 +303,13 @@ Last applied migration:
 
 目标：把当前代码部署到 Cloudflare。
 
-命令：
-
-```bash
-npx wrangler deploy
-```
-
-使用本地生产配置时：
+首次初始化使用显式生产配置：
 
 ```bash
 npx wrangler deploy --config wrangler.production.jsonc
 ```
+
+已有站点使用 `npm run deploy` 执行打包、配置核对、迁移和发布。
 
 Deploy Button 路径：
 
