@@ -74,7 +74,7 @@ async function handleRequest(request, env) {
     if (!(await isAuthenticated(request, env))) {
       return redirect('/login');
     }
-    return htmlResponse(renderIndexPage(env));
+    return htmlResponse(renderIndexPage(env), 200, { 'Cache-Control': 'no-store' });
   }
 
   if (pathname === '/bootstrap' && request.method === 'GET') {

@@ -173,7 +173,7 @@ function chromeEnd({ includeMain = true, includeAdminLink = false, includeAdmin 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/html.min.js"></script>
   <script src="/js/theme.js"></script>
   <script src="/js/particles-config.js"></script>
-  ${includeMain ? '<script src="/js/article-graphs.js"></script><script src="/js/article-workflow.js"></script><script src="/js/share-publisher.js"></script><script src="/js/main.js?v=share-confirm-v1"></script><script src="/js/syntax-highlight.js"></script>' : ''}
+  ${includeMain ? '<script src="/js/article-graphs.js?v=upload-recovery-v1"></script><script src="/js/article-workflow.js?v=upload-recovery-v1"></script><script src="/js/share-publisher.js?v=upload-recovery-v1"></script><script src="/js/upload-draft.js?v=upload-recovery-v1"></script><script src="/js/main.js?v=upload-recovery-v1"></script><script src="/js/syntax-highlight.js"></script>' : ''}
   ${includeAdmin ? '<script src="/js/admin.js?v=cloudflare"></script>' : ''}
 </body>
 </html>`;
@@ -265,7 +265,12 @@ export function renderIndexPage(env) {
         </div>
         <div style="display: none;">
           <input id="html-file" type="file" class="hidden" accept=".html,.htm,.md,.markdown,.svg,.txt,.zip,.docx" aria-label="上传文件" />
-          <p id="file-name" class="mt-3" style="color: var(--primary);"></p>
+        </div>
+        <div id="upload-result" hidden>
+          <p id="file-name" style="color: var(--primary);"></p>
+          <p id="upload-status" role="status" aria-live="polite"></p>
+          <p id="draft-status" class="workflow-note">草稿仅保存在此浏览器，24 小时后过期；点击清除可删除。</p>
+          <button id="upload-resume" type="button" class="workflow-btn" hidden>继续工作流</button>
         </div>
 
       </div>

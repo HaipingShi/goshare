@@ -117,6 +117,44 @@ document.addEventListener('DOMContentLoaded', () => {
   let previewCodeType = '';
   let previewMarkdownTheme = '';
   let previewSequence = 0;
+  let draftStore, draftTimer, draftUnavailable = false;
+  const uploadResult = document.getElementById('upload-result');
+  const uploadStatus = document.getElementById('upload-status');
+  const uploadResume = document.getElementById('upload-resume');
+  const draftStatus = document.getElementById('draft-status');
+  try {
+    if (window.location.pathname === '/') {
+      let tabId = sessionStorage.getItem('goshare-draft-tab');
+      if (!tabId) { tabId = crypto.randomUUID(); sessionStorage.setItem('goshare-draft-tab', tabId); }
+      draftStore = window.GoshareDraft.create(tabId);
+    }
+  } catch { draftUnavailable = true; }
+
+  function draftFailed() {
+    draftUnavailable = true;
+    if (draftStatus) draftStatus.textContent = '浏览器未能保存草稿，请保留当前页面；刷新后可能需要重新上传。';
+  }
+  async function saveDraft() {
+    clearTimeout(draftTimer);
+    if (!draftStore) { if (draftUnavailable) draftFailed(); return; }
+    try {
+      if (!htmlInput.value.trim()) await draftStore.clear();
+      else await draftStore.save({ content: htmlInput.value, codeType: uploadedCodeTypeOverride || getCurrentCodeType(htmlInput.value), zipContent: uploadedZipContent, name: fileName.textContent, markdownTheme: getMarkdownTheme(), warnings: document.getElementById('docx-import-notice')?.textContent });
+    } catch { draftFailed(); }
+  }
+  function resumeUpload(restored = false) {
+    try {
+      if (!workflow) throw new Error('工作流组件未加载');
+      workflow.startFile(fileName.textContent || '恢复的草稿', getCurrentCodeType(htmlInput.value));
+      if (restored) {
+        document.getElementById('workflow-title').textContent = '已恢复上传文件';
+        document.getElementById('workflow-upload-note').textContent = '已恢复浏览器中的草稿，无需重新上传。请重新选择处理方式；已保存的 AI 分析和图形会保留。';
+      }
+    } catch {
+      if (uploadStatus) uploadStatus.textContent = '文件内容已保留，但工作流弹窗未能启动。可点击预览，或刷新页面恢复草稿后继续。';
+      showErrorToast('工作流弹窗未能启动，已保留上传内容');
+    }
+  }
 
   function copyTextToClipboard(text) {
     try {
@@ -341,15 +379,16 @@ curl -X POST "${endpoint}" \\
     };
   }
 
-  const workflow = window.GoshareWorkflow?.create({
+  let workflow;
+  try { workflow = window.GoshareWorkflow?.create({
     getPayload: collectTextPayload,
-    applyContent(content, codeType) { htmlInput.value = content; uploadedCodeTypeOverride = codeType; invalidatePreview(); syncToTextarea(); },
+    applyContent(content, codeType) { htmlInput.value = content; uploadedCodeTypeOverride = codeType; invalidatePreview(); syncToTextarea(); saveDraft(); },
     renderPreview,
     setConfirmed(value) { if (generateButton) generateButton.disabled = !value; },
     setTheme(value) { if (markdownThemeSelect) markdownThemeSelect.value = value; },
     aiEnabled: document.getElementById('article-workflow-dialog')?.dataset.aiEnabled === 'true',
     createShareLink,
-  });
+  }); } catch { showErrorToast('工作流组件加载失败，文件仍可读取和预览'); }
 
   function invalidatePreview() {
     previewSequence++;
@@ -497,6 +536,7 @@ curl -X POST "${endpoint}" \\
 
       htmlInput.value = data.htmlContent;
       uploadedCodeTypeOverride = data.codeType || 'html';
+      saveDraft();
       updateCodeTypeIndicator(uploadedCodeTypeOverride, htmlInput.value);
       showSuccessToast('智能美化完成');
       await renderPreview();
@@ -544,122 +584,127 @@ curl -X POST "${endpoint}" \\
     }
   }
   
-  // 文件上传处理
+  // Save the original file before parsing, so a reload can resume the import.
   let fileImportSequence = 0;
-  if (fileInput) {
-    fileInput.addEventListener('change', async (event) => {
-      const file = event.target.files[0];
-      if (!file) return;
-      const importSequence = ++fileImportSequence;
-      const name = file.name.toLowerCase();
-      
-      const isZip = name.endsWith('.zip');
-      const isDocx = name.endsWith('.docx');
-      const isTextFile = /\.(html?|md|markdown|svg|txt)$/.test(name);
-      
-      if (!isTextFile && !isZip && !isDocx) {
-        showErrorToast('请上传 DOCX、HTML、ZIP、Markdown、SVG 或 TXT 文件（不支持旧版 .doc）');
-        return;
-      }
-      if (isDocx && file.size > 10 * 1024 * 1024) {
-        showErrorToast('DOCX 文件过大，请控制在10MB以内');
-        fileInput.value = '';
-        return;
-      }
-      
-      document.getElementById('docx-import-notice').hidden = true;
-      showLoading();
-      fileName.textContent = file.name;
-
-      if (isDocx) {
-        invalidatePreview();
-        fileInput.disabled = true;
-        htmlInput.disabled = true;
-        if (previewRenderButton) previewRenderButton.disabled = true;
-        if (beautifyButton) beautifyButton.disabled = true;
-        let importedDocx = false;
-        try {
-          const { parseDocx } = await import('/js/docx-import.js');
-          const result = await parseDocx(await file.arrayBuffer());
-          if (importSequence !== fileImportSequence) return;
-          uploadedZipContent = null;
-          uploadedCodeTypeOverride = 'docx';
-          htmlInput.value = result.html;
-          importedDocx = true;
-          syncToTextarea();
-          invalidatePreview();
-          showSuccessToast('DOCX 解析完成，点击“渲染预览”查看文章和图片');
-          if (result.warnings.length) {
-            document.getElementById('docx-import-notice').textContent = result.warnings.join('\n');
-            document.getElementById('docx-import-notice').hidden = false;
-          }
-        } catch (error) {
-          if (importSequence === fileImportSequence) showErrorToast(error.message || 'DOCX 解析失败，请检查文件是否损坏或加密');
-        } finally {
-          if (importSequence === fileImportSequence) {
-            htmlInput.disabled = Boolean(uploadedZipContent);
-            if (previewRenderButton) previewRenderButton.disabled = false;
-            invalidatePreview();
-            hideLoading();
-            fileInput.value = '';
-            fileInput.disabled = false;
-            syncToTextarea();
-            if (importedDocx) workflow?.startFile(file.name, 'docx');
-          }
-        }
-        return;
-      }
-      
-      if (isZip) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          if (importSequence !== fileImportSequence) return;
-          uploadedZipContent = e.target.result;
-          htmlInput.value = `[ZIP 静态网页: ${file.name}] (${(file.size / 1024).toFixed(1)} KB)\n此内容暂不支持在线编辑。点击“生成链接”即可发布此静态网站。`;
-          htmlInput.disabled = true;
-          updateCodeTypeIndicator('zip', htmlInput.value);
-          syncMarkdownThemeControl('zip');
-          invalidatePreview();
-          if (generateButton) generateButton.disabled = false;
-          hideLoading();
-          workflow?.startFile(file.name, 'zip');
-        };
-        reader.readAsDataURL(file);
-      } else {
-        uploadedZipContent = null;
-        
-        // 根据后缀名强制指定代码类型，避免自动检测误差
-        if (/\.(md|markdown|txt)$/.test(name)) {
-          uploadedCodeTypeOverride = 'markdown';
-        } else if (name.endsWith('.svg')) {
-          uploadedCodeTypeOverride = 'svg';
-        } else if (name.endsWith('.html') || name.endsWith('.htm')) {
-          uploadedCodeTypeOverride = 'html';
-        } else {
-          uploadedCodeTypeOverride = null;
-        }
-        
-        htmlInput.disabled = false;
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          if (importSequence !== fileImportSequence) return;
-          const content = e.target.result;
-          htmlInput.value = content;
-          htmlInput.selectionStart = htmlInput.selectionEnd = content.length;
-          syncToTextarea();
-          invalidatePreview();
-          hideLoading();
-          workflow?.startFile(file.name, getCurrentCodeType(content));
-        };
-        reader.readAsText(file);
-      }
+  function readFile(file, asDataURL = false) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('文件读取失败，请检查文件权限后重试'));
+      reader.onabort = () => reject(new Error('文件读取已取消，请重新选择文件'));
+      if (asDataURL) reader.readAsDataURL(file);
+      else reader.readAsText(file);
     });
   }
-  
+  async function importFile(file, restored = false) {
+    const importSequence = ++fileImportSequence;
+    const name = file.name.toLowerCase();
+    const isZip = name.endsWith('.zip'), isDocx = name.endsWith('.docx');
+    if (!/\.(html?|md|markdown|svg|txt|zip|docx)$/.test(name) || (isDocx && file.size > 10 * 1024 * 1024)) {
+      showErrorToast(isDocx ? 'DOCX 文件过大，请控制在10MB以内' : '请上传 DOCX、HTML、ZIP、Markdown、SVG 或 TXT 文件（不支持旧版 .doc）');
+      fileInput.value = '';
+      return;
+    }
+    clearTimeout(draftTimer);
+    const previousName = fileName.textContent;
+    workflow?.reset();
+    document.getElementById('docx-import-notice').hidden = true;
+    uploadResult.hidden = false;
+    uploadResume.hidden = true;
+    fileName.textContent = file.name;
+    uploadStatus.textContent = restored ? '正在恢复文件并继续解析…' : '文件已选择，正在读取和解析…';
+    showLoading();
+    fileInput.disabled = true;
+    htmlInput.disabled = true;
+    previewRenderButton.disabled = true;
+    if (beautifyButton) beautifyButton.disabled = true;
+    invalidatePreview();
+    let imported = false;
+    try {
+      if (draftStore) {
+        try { await draftStore.save({ pendingFile: file, name: file.name }); }
+        catch { draftFailed(); }
+      } else if (draftUnavailable) draftFailed();
+      if (importSequence !== fileImportSequence) return;
+      let content, codeType, warnings = [];
+      if (isDocx) {
+        const { parseDocx } = await import('/js/docx-import.js?v=upload-recovery-v1');
+        const result = await parseDocx(await file.arrayBuffer());
+        content = result.html; codeType = 'docx'; warnings = result.warnings;
+      } else {
+        content = await readFile(file, isZip);
+        codeType = isZip ? 'zip' : /\.(md|markdown|txt)$/.test(name) ? 'markdown' : /\.svg$/.test(name) ? 'svg' : 'html';
+      }
+      if (importSequence !== fileImportSequence) return;
+      if (!content.trim()) throw new Error('文件内容为空，请选择包含正文的文件');
+      uploadedZipContent = isZip ? content : null;
+      uploadedCodeTypeOverride = codeType;
+      htmlInput.value = isZip ? `[ZIP 静态网页: ${file.name}] (${(file.size / 1024).toFixed(1)} KB)\n此内容暂不支持在线编辑。点击“生成链接”即可发布此静态网站。` : content;
+      const notice = document.getElementById('docx-import-notice');
+      notice.textContent = warnings.join('\n'); notice.hidden = !warnings.length;
+      imported = true;
+      // Queue the completed draft before allowing any further interaction.
+      const saved = saveDraft();
+      uploadStatus.textContent = restored ? '文件已恢复，无需重新上传。' : '文件读取和解析成功，可以继续工作流。';
+      uploadResume.hidden = false;
+      showSuccessToast(restored ? '上传文件已恢复' : '文件上传成功');
+      await saved;
+    } catch (error) {
+      if (importSequence !== fileImportSequence) return;
+      uploadStatus.textContent = error.message || '文件解析失败，请重试';
+      showErrorToast(uploadStatus.textContent);
+      // A failed new file must not erase the previous editable content.
+      fileName.textContent = previousName;
+      uploadResume.hidden = !htmlInput.value.trim();
+      await saveDraft();
+    } finally {
+      if (importSequence === fileImportSequence) {
+        htmlInput.disabled = Boolean(uploadedZipContent);
+        previewRenderButton.disabled = false;
+        fileInput.value = ''; fileInput.disabled = false;
+        hideLoading(); syncToTextarea(); invalidatePreview();
+        if (uploadedZipContent && generateButton) generateButton.disabled = false;
+        if (imported) resumeUpload(restored);
+      }
+    }
+  }
+  if (fileInput) fileInput.addEventListener('change', event => {
+    const file = event.target.files[0];
+    if (file) importFile(file);
+  });
+  uploadResume?.addEventListener('click', () => resumeUpload());
+  async function restoreDraft() {
+    if (!draftStore || htmlInput.value || fileImportSequence) return;
+    const sequence = fileImportSequence;
+    try {
+      const draft = await draftStore.load();
+      if (!draft || htmlInput.value || sequence !== fileImportSequence) return;
+      if (draft.pendingFile) { await importFile(draft.pendingFile, true); return; }
+      if (!draft.content?.trim()) return;
+      uploadedZipContent = draft.zipContent || null;
+      uploadedCodeTypeOverride = draft.codeType;
+      htmlInput.value = draft.content;
+      htmlInput.disabled = Boolean(uploadedZipContent);
+      fileName.textContent = draft.name || '恢复的草稿';
+      if (draft.markdownTheme) markdownThemeSelect.value = draft.markdownTheme;
+      const notice = document.getElementById('docx-import-notice');
+      notice.textContent = draft.warnings || ''; notice.hidden = !draft.warnings;
+      uploadResult.hidden = false; uploadResume.hidden = false;
+      uploadStatus.textContent = '已恢复上传内容和已保存的图形，无需重新上传。';
+      syncToTextarea(); invalidatePreview();
+      if (uploadedZipContent && generateButton) generateButton.disabled = false;
+      resumeUpload(true);
+    } catch { draftFailed(); }
+  }
+
   // 清除按钮功能
   if (clearButton) {
     clearButton.addEventListener('click', () => {
       fileImportSequence++;
+      clearTimeout(draftTimer);
+      draftStore?.clear().catch(draftFailed);
+      if (uploadResult) uploadResult.hidden = true;
+      if (uploadResume) uploadResume.hidden = true;
       workflow?.reset();
       if (previewRenderButton) previewRenderButton.disabled = false;
       if (fileInput) { fileInput.value = ''; fileInput.disabled = false; }
@@ -1012,6 +1057,8 @@ curl -X POST "${endpoint}" \\
       // 同步到高亮区域
       syncToTextarea();
       invalidatePreview();
+      clearTimeout(draftTimer);
+      draftTimer = setTimeout(saveDraft, 400);
     });
     
     // 页面加载时检测初始内容
@@ -1072,7 +1119,7 @@ curl -X POST "${endpoint}" \\
   }
 
   if (markdownThemeSelect) {
-    markdownThemeSelect.addEventListener('change', invalidatePreview);
+    markdownThemeSelect.addEventListener('change', () => { invalidatePreview(); saveDraft(); });
   }
 
   if (customSuffixInput) {
@@ -1085,7 +1132,7 @@ curl -X POST "${endpoint}" \\
   }
 
   let creatingShare = false;
-  const sharePublisher = window.GoshareShare.createPublisher();
+  const sharePublisher = window.GoshareShare?.createPublisher();
   const shareDialog = document.getElementById('share-result-dialog');
   const shareStatus = document.getElementById('share-result-status');
   const shareContent = document.getElementById('share-result-content');
@@ -1094,6 +1141,7 @@ curl -X POST "${endpoint}" \\
   const shareInput = document.getElementById('share-html-url');
   async function createShareLink() {
       if (creatingShare) return;
+      if (!sharePublisher) { showErrorToast('分享组件未能加载，请刷新页面恢复草稿后重试'); return; }
       // Publication always uses the exact content last previewed.
       // 确保从编辑器同步到textarea
       syncToTextarea();
@@ -1463,5 +1511,6 @@ curl -X POST "${endpoint}" \\
   }
   
   // 初始化完成
+  restoreDraft();
   console.log('应用初始化完成');
 });
