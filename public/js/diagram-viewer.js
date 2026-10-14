@@ -113,6 +113,7 @@
     await Promise.allSettled(nodes.map(setupDiagram));
     if (parent !== window && location.href === 'about:srcdoc') {
       parent.postMessage({ type: 'goshare:diagrams-ready', requestId: document.querySelector('meta[name="goshare-preview-id"]')?.content,
+        count: document.querySelectorAll('[data-generated-diagram]').length,
         errors: document.querySelectorAll('.diagram-card[data-rendered="error"]').length }, '*');
     }
   }

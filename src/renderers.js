@@ -703,6 +703,7 @@ function articleReaderShell(content, className, aiEnabled) {
     <span id="article-node-count"></span>
     <span id="article-ai-status" role="status">${aiEnabled ? '' : '当前环境未启用 AI 分析'}</span>
     <progress id="article-progress" max="100" value="0" aria-label="阅读进度"></progress>
+    <nav id="article-graph-nav" class="reader-graph-nav" aria-label="生成图形导航" hidden></nav>
   </div>
   <div class="reader-layout outline-hidden">
     <aside class="reader-outline" id="article-outline" aria-label="文章目录" hidden>

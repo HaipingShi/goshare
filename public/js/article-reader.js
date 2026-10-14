@@ -116,6 +116,42 @@
     }
     updateToolbarOffset();
     if (typeof ResizeObserver !== 'undefined') new ResizeObserver(updateToolbarOffset).observe(toolbar);
+    // Generated figures are appended after the original source, preserving its
+    // block references. Expose them at the top so long articles do not hide them.
+    const graphNav = document.getElementById('article-graph-nav');
+    const figures = [...article.querySelectorAll('[data-generated-diagram]')];
+    if (graphNav && figures.length) {
+      const label = document.createElement('span');
+      label.textContent = `已生成 ${figures.length} 张图形：`;
+      graphNav.append(label);
+      figures.forEach((figure, index) => {
+        const kind = figure.dataset.generatedDiagram;
+        const title = window.GoshareGraphs.GRAPH_LABELS[kind] || '图形';
+        let id = `article-diagram-${index + 1}`;
+        while (usedIds.has(id)) id += '-graph';
+        figure.id = id;
+        figure.tabIndex = -1;
+        usedIds.add(id);
+        const link = document.createElement('a');
+        link.href = `#${id}`;
+        link.className = 'reader-button reader-graph-link';
+        link.setAttribute('aria-label', `查看${title}`);
+        const update = () => {
+          const state = figure.dataset.rendered;
+          link.textContent = `${title} · ${state === 'true' ? '已就绪' : state === 'error' ? '渲染失败' : '加载中'}`;
+        };
+        update();
+        new MutationObserver(update).observe(figure, { attributes: true, attributeFilter: ['data-rendered'] });
+        link.addEventListener('click', event => {
+          event.preventDefault();
+          figure.scrollIntoView({ block: 'start', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+          figure.focus({ preventScroll: true });
+        });
+        graphNav.append(link);
+      });
+      graphNav.hidden = false;
+      updateToolbarOffset();
+    }
     document.getElementById('article-node-count').textContent = records.length ? `${records.length} 个章节` : '未检测到章节标题';
     panel.hidden = records.length === 0;
     toggle.disabled = records.length === 0;

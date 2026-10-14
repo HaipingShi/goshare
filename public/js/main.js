@@ -446,7 +446,8 @@ curl -X POST "${endpoint}" \\
       const rendered = await ready;
       if (generation !== previewSequence) return false;
       if (rendered.timedOut) throw new Error('预览图形加载超时，请检查网络后重新预览。');
-      if (previewStatus) previewStatus.textContent = rendered.errors ? `预览已生成 · ${rendered.errors} 张图形未渲染，请查看错误提示` : '预览已生成';
+      if (previewStatus) previewStatus.textContent = rendered.errors ? `预览已生成 · ${rendered.errors} 张图形未渲染，请查看错误提示`
+        : rendered.count ? `预览已生成 · ${rendered.count} 张图形，可从预览顶部直接查看` : '预览已生成';
       if (!options.workflow && ['markdown', 'docx'].includes(data.codeType || payload.codeType)) workflow?.reviewPreview();
       return true;
     } catch (error) {

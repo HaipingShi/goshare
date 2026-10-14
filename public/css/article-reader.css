@@ -26,6 +26,9 @@
 }
 .reader-toolbar progress { margin-left: auto; width: 110px; height: 5px; accent-color: var(--reader-accent); }
 .reader-toolbar span { color: var(--reader-muted); }
+.reader-graph-nav { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; flex-basis: 100%; padding-top: 10px; border-top: 1px solid var(--reader-border); }
+.reader-graph-link { color: var(--reader-text); text-decoration: none; font-size: 12px; }
+.reader-graph-link:focus-visible { outline: 2px solid var(--reader-accent); outline-offset: 2px; }
 #article-ai-status:not(:empty) { flex-basis: 100%; font-size: 12px; }
 #article-ai-summary { border-left: 2px solid var(--reader-accent); padding-left: 10px; line-height: 1.6; }
 .reader-button[aria-pressed="true"] { background: var(--reader-hover); border-color: var(--reader-accent); }
