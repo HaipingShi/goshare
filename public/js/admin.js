@@ -181,7 +181,7 @@
   function setFormDisabled(disabled) {
     elements.content.disabled = disabled;
     elements.codeType.disabled = disabled;
-    elements.markdownTheme.disabled = disabled || elements.codeType.value !== 'markdown';
+    elements.markdownTheme.disabled = disabled || !['markdown', 'docx'].includes(elements.codeType.value);
     elements.protected.disabled = disabled;
     elements.copy.disabled = disabled;
     elements.save.disabled = disabled;
@@ -360,6 +360,6 @@
 
   function updateMarkdownThemeControl() {
     if (!elements.markdownTheme || !elements.codeType) return;
-    elements.markdownTheme.disabled = elements.codeType.disabled || elements.codeType.value !== 'markdown';
+    elements.markdownTheme.disabled = elements.codeType.disabled || !['markdown', 'docx'].includes(elements.codeType.value);
   }
 })();

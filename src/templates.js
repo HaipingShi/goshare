@@ -225,12 +225,12 @@ export function renderIndexPage(env) {
           <textarea id="html-input" class="cyber-input" placeholder="在这里粘贴你的 HTML/Markdown/SVG/Mermaid 代码..." aria-label="HTML 代码输入区域"></textarea>
         </div>
         <div style="display: none;">
-          <input id="html-file" type="file" class="hidden" accept=".html,.htm,.md,.markdown,.svg,.txt,.zip" aria-label="上传文件" />
+          <input id="html-file" type="file" class="hidden" accept=".html,.htm,.md,.markdown,.svg,.txt,.zip,.docx" aria-label="上传文件" />
           <p id="file-name" class="mt-3" style="color: var(--primary);"></p>
         </div>
         <div class="input-actions">
           <div class="input-actions-left">
-            <label for="html-file" class="cyber-btn cyber-btn-secondary tooltip micro-interaction" data-tooltip="上传 HTML/ZIP/Markdown/SVG 文件" aria-label="上传文件">
+            <label for="html-file" class="cyber-btn cyber-btn-secondary tooltip micro-interaction" data-tooltip="上传 DOCX/HTML/ZIP/Markdown/SVG 文件" aria-label="上传文件">
               <i class="fas fa-file-upload mr-1" aria-hidden="true"></i>上传文件
             </label>
             <label class="markdown-theme-control" for="markdown-theme-select">
@@ -316,6 +316,7 @@ export function renderIndexPage(env) {
       <textarea id="agent-api-prompt" class="agent-api-prompt" readonly aria-label="AI Agent API 创建分享页提示词"></textarea>
       <p class="agent-api-entry-note">这是公开 demo 创建接口，受每日额度和安全扫描限制。站点拥有者或授权 agent 才使用需要 <code>AGENT_API_TOKEN</code> 的 <code>/api/v1/agent/pages</code>。</p>
     </div>
+    <p id="docx-import-notice" class="card" role="status" hidden style="white-space: pre-wrap"></p>
     <div id="preview-section" class="card preview-card" hidden aria-live="polite">
       <div class="preview-card-header">
         <div>
@@ -339,13 +340,15 @@ export function renderIndexPage(env) {
           <h4 class="instructions-col-title">📝 代码与文档类型</h4>
           <ul class="instructions-list">
             <li><strong>HTML</strong>: 支持单页面（包含内联 CSS 和 JS）直接渲染</li>
-            <li><strong>Markdown</strong>: 自动解析并渲染为美观排版的文档</li>
-            <li><strong>SVG / Mermaid</strong>: 自动渲染为矢量图形、流程图与图表</li>
+            <li><strong>Markdown</strong>: AI 分析全文提炼智能目录和思维导图，支持搜索、折叠和跳转原文</li>
+            <li><strong>SVG / Mermaid</strong>: 自动渲染矢量图形、流程图、时序图和 mindmap 思维导图</li>
           </ul>
         </div>
         <div class="instructions-col">
-          <h4 class="instructions-col-title">📦 ZIP 静态网站托管</h4>
+          <h4 class="instructions-col-title">📄 DOCX 文档与静态网站</h4>
           <ul class="instructions-list">
+            <li>上传 <b>.docx</b>，保留标题、正文、列表、表格与图片。先渲染预览，再生成链接；阅读页支持 AI 智能目录和思维导图。</li>
+            <li>文档最大 10MB；旧版 .doc、复杂分页和 WMF/EMF 图片暂不支持。</li>
             <li>将静态网页的<b>所有构建产物</b>打包成 ZIP 格式压缩上传</li>
             <li>压缩包最外层根目录<b>必须</b>包含 <code>index.html</code> 首页入口文件</li>
             <li>Vite/React 等项目请先在构建配置中设置 <code>base: './'</code>，然后运行 <code>npm run build</code> 构建打包，最后将 <code>dist</code> 文件夹下的<b>所有内容</b>直接压缩后上传（不要包含源码文件夹 <code>src</code> 或外层 <code>dist</code> 文件夹本身）</li>
@@ -2615,6 +2618,7 @@ export function renderAdminPage(env) {
             <select id="admin-code-type" class="admin-select" disabled>
               <option value="html">HTML</option>
               <option value="markdown">Markdown</option>
+              <option value="docx">DOCX 文章</option>
               <option value="svg">SVG</option>
               <option value="mermaid">Mermaid</option>
               <option value="zip">ZIP (静态网页)</option>

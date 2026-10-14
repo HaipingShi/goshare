@@ -56,3 +56,6 @@ Thumbs.db
 .claude/
 .remember/
 .agent/
+
+# Browser DOCX parser built from locked npm dependencies
+public/js/docx-import.js

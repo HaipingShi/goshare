@@ -1,7 +1,7 @@
 {
   "name": "goshare",
   "version": "2.0.0",
-  "description": "HTML/Markdown/SVG/Mermaid 分享工具，支持 Cloudflare Workers、R2 和 D1 一键部署",
+  "description": "HTML/Markdown/DOCX/SVG/Mermaid 分享工具，支持 Cloudflare Workers、R2 和 D1 一键部署",
   "type": "module",
   "main": "src/worker.js",
   "scripts": {
@@ -14,7 +14,14 @@
     "production:verify": "node scripts/production.mjs verify",
     "deploy": "node scripts/production.mjs deploy",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
-    "db:migrate:remote": "node scripts/production.mjs migrate"
+    "db:migrate:remote": "node scripts/production.mjs migrate",
+    "build:docx": "node scripts/build-docx.mjs",
+    "postinstall": "npm run build:docx",
+    "prestart": "npm run build:docx",
+    "predev": "npm run build:docx",
+    "precheck": "npm run build:docx",
+    "precheck:production": "npm run build:docx",
+    "predeploy": "npm run build:docx"
   },
   "keywords": [
     "html",
@@ -27,9 +34,12 @@
   "license": "ISC",
   "dependencies": {
     "fflate": "^0.8.3",
-    "marked": "^15.0.7"
+    "mammoth": "^1.13.0",
+    "marked": "^15.0.7",
+    "sanitize-html": "^2.18.0"
   },
   "devDependencies": {
+    "esbuild": "^0.28.2",
     "playwright": "^1.60.0",
     "wrangler": "^4.93.0"
   },

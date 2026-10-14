@@ -1,4 +1,6 @@
 import * as fflate from 'fflate';
+import { sanitizeDocxContent } from './docx-content.js';
+import { validateArticleBlocks, buildArticleAnalysisPrompt, validateArticleAnalysis } from './article-analysis.js';
 import {
   renderErrorPage,
   renderAdminPage,
@@ -39,6 +41,7 @@ const CUSTOM_SUFFIX_PATTERN = /^[a-z0-9_-]{1,64}$/;
 const VALID_CODE_TYPES = new Set([
   CODE_TYPES.HTML,
   CODE_TYPES.MARKDOWN,
+  CODE_TYPES.DOCX,
   CODE_TYPES.SVG,
   CODE_TYPES.MERMAID,
   CODE_TYPES.ZIP,
@@ -127,6 +130,11 @@ async function handleRequest(request, env) {
   if (pathname === '/api/pages/beautify' && request.method === 'POST') {
     if (!(await isAuthenticated(request, env))) return unauthorizedJson();
     return beautifyPage(request, env);
+  }
+
+  if (pathname === '/api/pages/article-analysis' && request.method === 'POST') {
+    if (!(await isAuthenticated(request, env))) return unauthorizedJson();
+    return analyzeArticle(request, env);
   }
 
   if (pathname === '/api/pages/list/recent' && request.method === 'GET') {
@@ -479,7 +487,7 @@ async function createSharePageFromPayload(payload, env, options = {}) {
     return createPageError('请求格式错误', 400);
   }
 
-  const htmlContent = String(payload.htmlContent ?? payload.content ?? '').trim();
+  let htmlContent = String(payload.htmlContent ?? payload.content ?? '').trim();
   const zipContent = String(payload.zipContent || '').trim();
   const isProtected = Boolean(payload.isProtected);
   const requestedCodeType = String(payload.codeType || '').trim().toLowerCase();
@@ -491,7 +499,7 @@ async function createSharePageFromPayload(payload, env, options = {}) {
   const codeType = VALID_CODE_TYPES.has(requestedCodeType)
     ? requestedCodeType
     : normalizeDetectedCodeType(detectCodeType(htmlContent));
-  const markdownTheme = codeType === CODE_TYPES.MARKDOWN
+  const markdownTheme = [CODE_TYPES.MARKDOWN, CODE_TYPES.DOCX].includes(codeType)
     ? normalizeMarkdownTheme(payload.markdownTheme)
     : normalizeMarkdownTheme();
 
@@ -509,6 +517,12 @@ async function createSharePageFromPayload(payload, env, options = {}) {
     if (htmlContent.length > MAX_CONTENT_LENGTH) {
       return createPageError('内容过大，请控制在10MB以内', 413);
     }
+  }
+
+  if (codeType === CODE_TYPES.DOCX) {
+    try { htmlContent = sanitizeDocxContent(htmlContent); }
+    catch (error) { return createPageError(error.message, 413); }
+    if (!htmlContent.trim()) return createPageError('DOCX 没有可读取的安全内容', 400);
   }
 
   const password = generateRandomPassword();
@@ -1003,7 +1017,7 @@ async function previewPage(request, env) {
   const input = parseTextContentPayload(payload.data);
   if (!input.ok) return input.response;
 
-  if (input.content.length > MAX_PREVIEW_CONTENT_LENGTH) {
+  if (input.codeType !== CODE_TYPES.DOCX && input.content.length > MAX_PREVIEW_CONTENT_LENGTH) {
     return jsonResponse({ success: false, error: '预览内容过大，请控制在512KB以内' }, 413);
   }
 
@@ -1014,6 +1028,7 @@ async function previewPage(request, env) {
   const normalized = normalizeContentForRendering(input.content, input.codeType);
   const renderedContent = await renderContent(normalized.content, normalized.contentType, {
     markdownTheme: input.markdownTheme,
+    aiAnalysisEnabled: String(env.AI_ENABLED || 'true').toLowerCase() !== 'false' && Boolean(env.AI),
   });
   const html = injectCodeTypeMeta(renderedContent, normalized.contentType || input.codeType);
 
@@ -1042,6 +1057,9 @@ async function beautifyPage(request, env) {
 
   if (input.codeType === CODE_TYPES.ZIP) {
     return jsonResponse({ success: false, error: 'ZIP 静态网站暂不支持智能美化。' }, 400);
+  }
+  if (input.codeType === CODE_TYPES.DOCX) {
+    return jsonResponse({ success: false, error: 'DOCX 请使用文章预览中的 AI 分析全文，保留原文和图片。' }, 400);
   }
 
   const quota = await enforceDailyLimit(env, `ai:${await getSubmitterKey(request, env)}`, getDailyAiLimit(env));
@@ -1100,6 +1118,47 @@ async function beautifyPage(request, env) {
     warnings: Array.isArray(parsed.value.warnings) ? parsed.value.warnings.slice(0, 5) : [],
     quota: quotaSummary(quota),
   });
+}
+
+async function analyzeArticle(request, env) {
+  assertBindings(env);
+  if (String(env.AI_ENABLED || 'true').toLowerCase() === 'false' || !env.AI) {
+    return apiErrorResponse({ code: 'AI_DISABLED', message: '当前环境未启用 AI 文章分析。', status: 403 });
+  }
+  if (Number(request.headers.get('Content-Length')) > 512 * 1024) {
+    return apiErrorResponse({ code: 'TOO_LARGE', message: '分析请求过大。', status: 413 });
+  }
+  const payload = await readJsonPayload(request);
+  if (!payload.ok) return payload.response;
+  let blocks;
+  try {
+    blocks = validateArticleBlocks(payload.data?.blocks);
+  } catch (error) {
+    return apiErrorResponse({ code: error instanceof RangeError ? 'TOO_LARGE' : 'INVALID_REQUEST', message: error.message, status: error instanceof RangeError ? 413 : 400 });
+  }
+  const quota = await enforceDailyLimit(env, `ai:${await getSubmitterKey(request, env)}`, getDailyAiLimit(env));
+  if (!quota.ok) return dailyLimitResponse(quota, '今日 AI 次数已达上限，文章分析与智能美化共用额度。');
+  try {
+    const model = String(env.AI_BEAUTIFY_MODEL || DEFAULT_BEAUTIFY_MODEL);
+    const result = await env.AI.run(model, {
+      messages: [
+        { role: 'system', content: 'You analyze articles into evidence-grounded semantic trees. Return only valid JSON.' },
+        { role: 'user', content: buildArticleAnalysisPrompt(blocks) },
+      ],
+      temperature: 0.2,
+      max_completion_tokens: 4096,
+      ...(model === DEFAULT_BEAUTIFY_MODEL ? {
+        response_format: { type: 'json_object' },
+        chat_template_kwargs: { enable_thinking: false },
+      } : {}),
+    });
+    const raw = stripMarkdownFence(extractAiText(result));
+    const analysis = validateArticleAnalysis(JSON.parse(raw), blocks);
+    return jsonResponse({ success: true, analysis, quota: quotaSummary(quota) });
+  } catch (error) {
+    console.error('AI article analysis failed:', error?.name || 'Error');
+    return apiErrorResponse({ code: 'AI_ANALYSIS_FAILED', message: 'AI 分析暂未返回有效的原文节点，请稍后重试。', status: 502, retryable: true, quota });
+  }
 }
 
 async function listRecentPages(request, env) {
@@ -1276,12 +1335,12 @@ async function updateOwnedPage(request, env, id) {
     }, 200, owner.cookieHeader ? { 'Set-Cookie': owner.cookieHeader } : {});
   }
 
-  const htmlContent = String(payload.htmlContent || '').trim();
+  let htmlContent = String(payload.htmlContent || '').trim();
   const requestedCodeType = String(payload.codeType || '');
   const codeType = VALID_CODE_TYPES.has(requestedCodeType)
     ? requestedCodeType
     : normalizeDetectedCodeType(detectCodeType(htmlContent));
-  const markdownTheme = codeType === CODE_TYPES.MARKDOWN
+  const markdownTheme = [CODE_TYPES.MARKDOWN, CODE_TYPES.DOCX].includes(codeType)
     ? normalizeMarkdownTheme(payload.markdownTheme)
     : normalizeMarkdownTheme();
 
@@ -1291,6 +1350,12 @@ async function updateOwnedPage(request, env, id) {
 
   if (htmlContent.length > MAX_CONTENT_LENGTH) {
     return jsonResponse({ success: false, error: '内容过大，请控制在10MB以内' }, 413);
+  }
+
+  if (codeType === CODE_TYPES.DOCX) {
+    try { htmlContent = sanitizeDocxContent(htmlContent); }
+    catch (error) { return jsonResponse({ success: false, error: error.message }, 413); }
+    if (!htmlContent.trim()) return jsonResponse({ success: false, error: 'DOCX 没有可读取的安全内容' }, 400);
   }
 
   const encoder = new TextEncoder();
@@ -1570,6 +1635,7 @@ async function viewPage(request, env, id, subpath = '') {
     const normalized = normalizeContentForRendering(rawContent, page.code_type);
     const renderedContent = await renderContent(normalized.content, normalized.contentType, {
       markdownTheme: page.markdown_theme,
+      aiAnalysisEnabled: String(env.AI_ENABLED || 'true').toLowerCase() !== 'false' && Boolean(env.AI),
     });
     const contentWithTypeInfo = injectGoshareDataSdk(
       injectShareMeta(
@@ -1638,7 +1704,7 @@ async function readJsonPayload(request) {
 }
 
 function parseTextContentPayload(payload) {
-  const htmlContent = String(payload.htmlContent || '').trim();
+  let htmlContent = String(payload.htmlContent || '').trim();
   const requestedCodeType = String(payload.codeType || '');
   const codeType = VALID_CODE_TYPES.has(requestedCodeType)
     ? requestedCodeType
@@ -1649,6 +1715,12 @@ function parseTextContentPayload(payload) {
       ok: false,
       response: jsonResponse({ success: false, error: '请提供可预览的内容' }, 400),
     };
+  }
+
+  if (codeType === CODE_TYPES.DOCX) {
+    try { htmlContent = sanitizeDocxContent(htmlContent); }
+    catch (error) { return { ok: false, response: jsonResponse({ success: false, error: error.message }, 413) }; }
+    if (!htmlContent.trim()) return { ok: false, response: jsonResponse({ success: false, error: 'DOCX 没有可读取的安全内容' }, 400) };
   }
 
   return {
@@ -2017,6 +2089,7 @@ function shouldUseShareMetadataAi(env, content, codeType) {
 }
 
 async function generateAiShareMetadata(env, content, codeType) {
+  if (codeType === CODE_TYPES.DOCX) content = htmlToText(content);
   const model = String(env.AI_SHARE_METADATA_MODEL || DEFAULT_SHARE_METADATA_MODEL);
   const prompt = buildShareMetadataPrompt(
     content.slice(0, getMaxShareMetadataContentLength(env)),
@@ -2090,14 +2163,14 @@ function extractFallbackShareMetadata(content, codeType) {
     };
   }
 
-  if (codeType === CODE_TYPES.HTML) {
+  if ([CODE_TYPES.HTML, CODE_TYPES.DOCX].includes(codeType)) {
     const title = raw.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]
       || raw.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)?.[1];
     const description = raw.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["'][^>]*>/i)?.[1]
       || raw.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["'][^>]*>/i)?.[1];
     const plainText = htmlToText(raw);
     return {
-      title: normalizeShareTitle(htmlToText(title || '')) || 'HTML 分享',
+      title: normalizeShareTitle(htmlToText(title || '')) || (codeType === CODE_TYPES.DOCX ? 'DOCX 文章分享' : 'HTML 分享'),
       summary: normalizeShareSummary(description || plainText) || '一个通过 goshare 发布的 HTML 页面。',
     };
   }

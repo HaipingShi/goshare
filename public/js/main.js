@@ -155,8 +155,8 @@ document.addEventListener('DOMContentLoaded', () => {
 - 重试时使用相同 Idempotency-Key，避免超时后重复创建。
 
 请求 JSON 字段：
-- htmlContent：HTML、Markdown、SVG 或 Mermaid 文本。
-- codeType：html、markdown、svg、mermaid 或 zip。
+- htmlContent：HTML、Markdown、SVG 或 Mermaid 文本；docx 类型传解析后的文章 HTML。
+- codeType：html、markdown、docx、svg、mermaid 或 zip。
 - markdownTheme：Markdown 可选 bytedance、github、docs、clean、magazine、note、slate。
 - title / summary：可选；不填时 goshare 会尝试生成或提取。
 - customSuffix：可选；自定义分享链接后缀，只能用小写字母、数字、短横线或下划线。
@@ -277,7 +277,7 @@ curl -X POST "${endpoint}" \\
   }
 
   function isMarkdownType(codeType) {
-    return codeType === 'markdown';
+    return codeType === 'markdown' || codeType === 'docx';
   }
 
   function getMarkdownTheme() {
@@ -341,7 +341,7 @@ curl -X POST "${endpoint}" \\
     previewCodeType = '';
     previewMarkdownTheme = '';
     if (generateButton) generateButton.disabled = true;
-    if (beautifyButton) beautifyButton.disabled = !htmlInput || !htmlInput.value.trim() || Boolean(uploadedZipContent);
+    if (beautifyButton) beautifyButton.disabled = !htmlInput || !htmlInput.value.trim() || Boolean(uploadedZipContent) || uploadedCodeTypeOverride === 'docx';
     if (previewStatus) previewStatus.textContent = '预览已失效';
     if (resultSection) {
       resultSection.style.display = 'none';
@@ -358,8 +358,27 @@ curl -X POST "${endpoint}" \\
     previewCodeType = codeType;
     previewMarkdownTheme = markdownTheme;
     if (generateButton) generateButton.disabled = false;
-    if (beautifyButton) beautifyButton.disabled = Boolean(uploadedZipContent);
+    if (beautifyButton) beautifyButton.disabled = Boolean(uploadedZipContent) || codeType === 'docx';
   }
+
+  window.addEventListener('message', async (event) => {
+    if (!renderPreviewFrame || event.source !== renderPreviewFrame.contentWindow || event.data?.type !== 'goshare:article-analysis') return;
+    const { requestId, blocks } = event.data;
+    if (typeof requestId !== 'string' || !Array.isArray(blocks)) return;
+    let result;
+    try {
+      const response = await fetch('/api/pages/article-analysis', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blocks }), signal: AbortSignal.timeout(90000),
+      });
+      result = await response.json();
+    } catch {
+      result = { success: false, error: 'AI 分析请求失败或超时，请稍后重试。' };
+    }
+    if (event.source === renderPreviewFrame.contentWindow) {
+      event.source.postMessage({ type: 'goshare:article-analysis-result', requestId, result }, '*');
+    }
+  });
 
   async function renderPreview() {
     syncToTextarea();
@@ -410,6 +429,10 @@ curl -X POST "${endpoint}" \\
 
     if (payload.codeType === 'zip') {
       showErrorToast('ZIP 静态网站暂不支持智能美化');
+      return;
+    }
+    if (payload.codeType === 'docx') {
+      showErrorToast('DOCX 请在渲染预览中使用“AI 分析全文”，保留原文和图片');
       return;
     }
 
@@ -479,30 +502,71 @@ curl -X POST "${endpoint}" \\
   }
   
   // 文件上传处理
+  let fileImportSequence = 0;
   if (fileInput) {
-    fileInput.addEventListener('change', (event) => {
+    fileInput.addEventListener('change', async (event) => {
       const file = event.target.files[0];
       if (!file) return;
+      const importSequence = ++fileImportSequence;
+      const name = file.name.toLowerCase();
       
-      const isZip = file.name.endsWith('.zip');
-      const isTextFile = file.name.endsWith('.html') || 
-                         file.name.endsWith('.htm') || 
-                         file.name.endsWith('.md') || 
-                         file.name.endsWith('.markdown') || 
-                         file.name.endsWith('.svg') || 
-                         file.name.endsWith('.txt');
+      const isZip = name.endsWith('.zip');
+      const isDocx = name.endsWith('.docx');
+      const isTextFile = /\.(html?|md|markdown|svg|txt)$/.test(name);
       
-      if (!isTextFile && !isZip) {
-        showErrorToast('请上传 HTML、ZIP、Markdown、SVG 或 TXT 文件');
+      if (!isTextFile && !isZip && !isDocx) {
+        showErrorToast('请上传 DOCX、HTML、ZIP、Markdown、SVG 或 TXT 文件（不支持旧版 .doc）');
+        return;
+      }
+      if (isDocx && file.size > 10 * 1024 * 1024) {
+        showErrorToast('DOCX 文件过大，请控制在10MB以内');
+        fileInput.value = '';
         return;
       }
       
+      document.getElementById('docx-import-notice').hidden = true;
       showLoading();
       fileName.textContent = file.name;
+
+      if (isDocx) {
+        invalidatePreview();
+        fileInput.disabled = true;
+        htmlInput.disabled = true;
+        if (previewRenderButton) previewRenderButton.disabled = true;
+        if (beautifyButton) beautifyButton.disabled = true;
+        try {
+          const { parseDocx } = await import('/js/docx-import.js');
+          const result = await parseDocx(await file.arrayBuffer());
+          if (importSequence !== fileImportSequence) return;
+          uploadedZipContent = null;
+          uploadedCodeTypeOverride = 'docx';
+          htmlInput.value = result.html;
+          syncToTextarea();
+          invalidatePreview();
+          showSuccessToast('DOCX 解析完成，点击“渲染预览”查看文章和图片');
+          if (result.warnings.length) {
+            document.getElementById('docx-import-notice').textContent = result.warnings.join('\n');
+            document.getElementById('docx-import-notice').hidden = false;
+          }
+        } catch (error) {
+          if (importSequence === fileImportSequence) showErrorToast(error.message || 'DOCX 解析失败，请检查文件是否损坏或加密');
+        } finally {
+          if (importSequence === fileImportSequence) {
+            htmlInput.disabled = Boolean(uploadedZipContent);
+            if (previewRenderButton) previewRenderButton.disabled = false;
+            invalidatePreview();
+            hideLoading();
+            fileInput.value = '';
+            fileInput.disabled = false;
+          }
+        }
+        return;
+      }
       
       if (isZip) {
         const reader = new FileReader();
         reader.onload = (e) => {
+          if (importSequence !== fileImportSequence) return;
           uploadedZipContent = e.target.result;
           htmlInput.value = `[ZIP 静态网页: ${file.name}] (${(file.size / 1024).toFixed(1)} KB)\n此内容暂不支持在线编辑。点击“生成链接”即可发布此静态网站。`;
           htmlInput.disabled = true;
@@ -530,6 +594,7 @@ curl -X POST "${endpoint}" \\
         htmlInput.disabled = false;
         const reader = new FileReader();
         reader.onload = (e) => {
+          if (importSequence !== fileImportSequence) return;
           const content = e.target.result;
           htmlInput.value = content;
           htmlInput.selectionStart = htmlInput.selectionEnd = content.length;
@@ -545,6 +610,11 @@ curl -X POST "${endpoint}" \\
   // 清除按钮功能
   if (clearButton) {
     clearButton.addEventListener('click', () => {
+      fileImportSequence++;
+      if (previewRenderButton) previewRenderButton.disabled = false;
+      if (fileInput) { fileInput.value = ''; fileInput.disabled = false; }
+      document.getElementById('docx-import-notice').hidden = true;
+      hideLoading();
       console.log('清除按钮被点击');
       if (htmlInput) {
         htmlInput.value = '';
@@ -642,7 +712,8 @@ curl -X POST "${endpoint}" \\
         trimmedCode.startsWith('classDiagram') || 
         trimmedCode.startsWith('gantt') || 
         trimmedCode.startsWith('pie') || 
-        trimmedCode.startsWith('flowchart'))) {
+        trimmedCode.startsWith('flowchart') ||
+        /^(mindmap|timeline|stateDiagram(?:-v2)?|erDiagram|journey|gitGraph|quadrantChart|sankey-beta|xychart-beta)\b/.test(trimmedCode))) {
       console.log('检测到纯Mermaid图表');
       return 'mermaid';
     }
@@ -815,6 +886,11 @@ curl -X POST "${endpoint}" \\
         label = 'Markdown';
         className = 'markdown-type';
         break;
+      case 'docx':
+        iconClass = 'fas fa-file-word';
+        label = 'DOCX 文章';
+        className = 'markdown-type';
+        break;
       case 'svg':
         iconClass = 'fas fa-bezier-curve';
         label = 'SVG';
@@ -877,9 +953,9 @@ curl -X POST "${endpoint}" \\
   if (htmlInput) {
     htmlInput.addEventListener('input', () => {
       // 手动修改内容时，清除强制指定类型，恢复自动检测
-      uploadedCodeTypeOverride = null;
+      if (uploadedCodeTypeOverride !== 'docx') uploadedCodeTypeOverride = null;
       const content = htmlInput.value;
-      const codeType = detectCodeType(content);
+      const codeType = uploadedCodeTypeOverride || detectCodeType(content);
       updateCodeTypeIndicator(codeType, content);
       
       // 同步到高亮区域
@@ -901,7 +977,7 @@ curl -X POST "${endpoint}" \\
         const metaCodeType = document.querySelector('meta[name="code-type"]');
         if (metaCodeType && metaCodeType.getAttribute('content')) {
           const typeFromMeta = metaCodeType.getAttribute('content');
-          if (['html', 'markdown', 'svg', 'mermaid'].includes(typeFromMeta)) {
+          if (['html', 'markdown', 'docx', 'svg', 'mermaid'].includes(typeFromMeta)) {
             codeType = typeFromMeta;
             console.log(`从 meta 标签中获取代码类型: ${codeType}`);
           }
@@ -910,7 +986,7 @@ curl -X POST "${endpoint}" \\
           const urlParams = new URLSearchParams(window.location.search);
           const typeFromUrl = urlParams.get('type');
           
-          if (typeFromUrl && ['html', 'markdown', 'svg', 'mermaid'].includes(typeFromUrl)) {
+          if (typeFromUrl && ['html', 'markdown', 'docx', 'svg', 'mermaid'].includes(typeFromUrl)) {
             codeType = typeFromUrl;
             console.log(`从 URL 参数中获取代码类型: ${codeType}`);
           } else {
@@ -924,6 +1000,7 @@ curl -X POST "${endpoint}" \\
         codeType = detectCodeType(content);
       }
       
+      if (codeType === 'docx') uploadedCodeTypeOverride = 'docx';
       updateCodeTypeIndicator(codeType, content);
     } else {
       // 初始时如果没有内容，隐藏指示器

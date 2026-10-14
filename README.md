@@ -188,6 +188,9 @@ goshare 不会要求你的 Cloudflare API Token，也不会把 Worker Secrets �
 | 能力 | 说明 |
 | --- | --- |
 | HTML / Markdown / SVG / Mermaid | 自动识别并渲染成可分享页面 |
+| 文章节点目录 | AI 分析全文提炼主题节点并关联原文，支持搜索、折叠、跳转，也可切回标题目录 |
+| 文章思维导图 | 根据 AI 提炼的主题关系生成 Mermaid mindmap，可缩放、重置并查看源码 |
+| Mermaid 图表 | Markdown 内嵌图表与独立图表共用渲染组件，语法错误显示源码并可重试 |
 | 静态 ZIP | 上传构建产物，托管一个轻量静态站 |
 | 访问密码 | 给单条分享开启 5 位数字密码 |
 | H5 分享卡片 | 生成 `/share/<id>` 卡片页，转发时展示标题、摘要和打开入口 |
@@ -208,6 +211,41 @@ goshare 不会要求你的 Cloudflare API Token，也不会把 Worker Secrets �
 | ![goshare 后台](docs/assets/goshare-admin.png) | ![goshare 密码访问页](docs/assets/goshare-password-gate.png) |
 
 </details>
+
+## 文章目录、思维导图与 Mermaid
+
+粘贴 Markdown，在渲染预览或正文页中点击 **AI 分析全文**，让 Workers AI 提炼全文摘要、主题和子节点，生成关联原文段落的智能目录。点击 **思维导图** 查看这些主题之间的层级关系；点击目录节点可跳回原文，悬停可查看该节点的摘要。没有标题的文章也能分析。
+
+AI 分析与智能美化共用 `DAILY_AI_LIMIT` 配额，使用现有 `AI` binding 和 `AI_BEAUTIFY_MODEL`。每次支持最多 64K 字符、400 个原文块，不会静默截断；结果最多 60 个节点、4 层，并验证每个节点引用的原文块是否真实存在。本次打开页面时的分析结果会缓存在内存中，切换目录模式不会重复调用模型。详细接口与使用限制见 [文章阅读说明](docs/ARTICLE_READING.md)。
+
+默认仍提供按 H1–H6 生成的标题目录作为基础阅读导航，AI 成功后可以切回 **标题目录**。在标题模式下，无标题文章会禁用目录与导图入口；AI 分析入口仍可使用。标题导图最多显示 120 个节点，优先保留顶层章节。已有 Markdown 分享页在部署新版本后也会获得这些能力，不需要重新创建。
+
+Markdown 中使用 `mermaid` 代码块，例如：
+
+````markdown
+# 学习路线
+
+## 基础知识
+
+```mermaid
+flowchart LR
+  阅读 --> 实践 --> 复盘
+```
+
+## 知识结构
+
+```mermaid
+mindmap
+  root((学习))
+    基础知识
+      阅读
+    工程实践
+      项目
+      复盘
+```
+````
+
+也可以直接粘贴以 `mindmap`、`flowchart`、`sequenceDiagram` 等开头的图表源码，生成独立图表页。渲染使用固定版本的 Mermaid，按需从 CDN 加载；加载失败时可重试，语法错误可展开源码排查。
 
 ## Agent API
 
@@ -413,3 +451,9 @@ Thanks to [Cloudflare Workers](https://workers.cloudflare.com/), [Cloudflare R2]
 ## License
 
 ISC
+
+### DOCX 文档上传
+
+上传 `.docx` 可保留标题、正文、嵌套列表、表格（含合并单元格）和内嵌图片，并使用 AI 智能目录与思维导图。先渲染预览，再生成分享链接。最大 10MB；图片与正文一起保存。旧版 `.doc`、复杂 Word 排版和 WMF/EMF 图片暂不支持。详见 [DOCX 导入说明](docs/DOCX_IMPORT.md)。
+
+浏览器解析器在 `npm ci` 及开发、检查、部署脚本运行前自动构建；跳过 npm 生命周期时先运行 `npm run build:docx`。无需修改生产配置或新增 Secret。

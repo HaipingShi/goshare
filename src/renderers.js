@@ -1,9 +1,11 @@
 import { marked } from 'marked';
+import { sanitizeDocxContent } from './docx-content.js';
 import { escapeHtml } from './templates.js';
 
 export const CODE_TYPES = {
   HTML: 'html',
   MARKDOWN: 'markdown',
+  DOCX: 'docx',
   SVG: 'svg',
   MERMAID: 'mermaid',
   ZIP: 'zip',
@@ -36,9 +38,11 @@ export function detectCodeType(code) {
     return CODE_TYPES.HTML;
   }
 
-  if (trimmedCode.startsWith('```html')) return CODE_TYPES.HTML;
-  if (trimmedCode.startsWith('```mermaid')) return CODE_TYPES.MERMAID;
-  if (trimmedCode.startsWith('```svg')) return CODE_TYPES.SVG;
+  const openingFence = /^```(html|mermaid|svg)\b[^\r\n]*\r?\n/.exec(trimmedCode);
+  if (openingFence) {
+    const closingFence = trimmedCode.indexOf('```', openingFence[0].length);
+    if (closingFence !== -1 && !trimmedCode.slice(closingFence + 3).trim()) return openingFence[1];
+  }
 
   if (
     trimmedCode.startsWith('<svg') &&
@@ -49,7 +53,8 @@ export function detectCodeType(code) {
   }
 
   if (trimmedCode.includes('```mermaid')) {
-    return isDefinitelyMarkdown(trimmedCode) ? CODE_TYPES.MARKDOWN : CODE_TYPES.MERMAID;
+    const prose = trimmedCode.replace(/```[^\n]*\n[\s\S]*?```/g, '').trim();
+    return prose || isDefinitelyMarkdown(trimmedCode) ? CODE_TYPES.MARKDOWN : CODE_TYPES.MERMAID;
   }
 
   if (trimmedCode.includes('```svg')) {
@@ -67,6 +72,11 @@ export function detectCodeType(code) {
     /^\s*journey/i,
     /^\s*stateDiagram/i,
     /^\s*gitGraph/i,
+    /^\s*mindmap\b/i,
+    /^\s*timeline\b/i,
+    /^\s*quadrantChart\b/i,
+    /^\s*sankey-beta\b/i,
+    /^\s*xychart-beta\b/i,
   ];
 
   if (mermaidPatterns.some((pattern) => pattern.test(trimmedCode)) && !containsMarkdownFeatures(trimmedCode)) {
@@ -137,19 +147,25 @@ export async function renderContent(content, contentType, options = {}) {
   switch (contentType) {
     case CODE_TYPES.HTML:
       return renderHtml(content);
+    case CODE_TYPES.DOCX:
+      return renderMarkdown(sanitizeDocxContent(content), options.markdownTheme, { ...options, docx: true });
     case CODE_TYPES.MARKDOWN:
-      return renderMarkdown(content, options.markdownTheme);
+      return renderMarkdown(content, options.markdownTheme, options);
     case CODE_TYPES.SVG:
       return renderSvg(content);
     case CODE_TYPES.MERMAID:
       return renderMermaid(content);
     default:
-      return renderMarkdown(content, options.markdownTheme);
+      return renderMarkdown(content, options.markdownTheme, options);
   }
 }
 
 export function normalizeContentForRendering(rawContent, expectedType) {
   // 如果已明确预期类型是 Markdown，或者整文内容被判定为 Markdown，则不应当提取其中的代码块，而应整文渲染
+  if (expectedType === CODE_TYPES.DOCX) {
+    return { content: sanitizeDocxContent(rawContent), contentType: CODE_TYPES.DOCX };
+  }
+
   if (expectedType === CODE_TYPES.MARKDOWN) {
     return {
       content: rawContent,
@@ -299,17 +315,21 @@ function renderHtml(content) {
 </html>`;
 }
 
-function renderMarkdown(content, theme) {
+function renderMarkdown(content, theme, options = {}) {
   const markdownTheme = normalizeMarkdownTheme(theme);
   const renderer = new marked.Renderer();
   const originalCodeRenderer = renderer.code.bind(renderer);
+  let headingIndex = 0;
+  renderer.heading = function headingRenderer({ tokens, depth }) {
+    return `<h${depth} id="article-section-${++headingIndex}">${this.parser.parseInline(tokens)}</h${depth}>\n`;
+  };
 
   renderer.code = function codeRenderer(tokenOrCode, infostring, escaped) {
     const code = typeof tokenOrCode === 'object' && tokenOrCode !== null ? tokenOrCode.text : tokenOrCode;
     const language = typeof tokenOrCode === 'object' && tokenOrCode !== null ? tokenOrCode.lang : infostring;
-    const normalizedLanguage = String(language || '').toLowerCase();
+    const normalizedLanguage = String(language || '').trim().split(/\s+/)[0].toLowerCase();
 
-    if (normalizedLanguage === 'mermaid' || isMermaidContent(code)) {
+    if (normalizedLanguage === 'mermaid' || (!normalizedLanguage && isMermaidContent(code))) {
       return `<div class="mermaid">${escapeHtml(code)}</div>`;
     }
 
@@ -320,27 +340,22 @@ function renderMarkdown(content, theme) {
     return originalCodeRenderer(tokenOrCode, infostring, escaped);
   };
 
-  marked.setOptions({
-    gfm: true,
-    breaks: true,
-    renderer,
-  });
-
-  const processedContent = preprocessMarkdown(content);
-  const htmlContent = processedContent.startsWith('<div class="mermaid">')
+  const processedContent = options.docx ? content : preprocessMarkdown(content);
+  const htmlContent = options.docx || processedContent.startsWith('<div class="mermaid">')
     ? processedContent
-    : marked.parse(processedContent);
+    : marked.parse(processedContent, { gfm: true, breaks: true, renderer });
 
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>goshare Markdown查看器</title>
+  <title>goshare ${options.docx ? 'DOCX 文章' : 'Markdown'}查看器</title>
   ${viewerIcons()}
   <link rel="stylesheet" href="${getMarkdownThemeStylesheet(markdownTheme)}">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/atom-one-dark.min.css">
   <link rel="stylesheet" href="/css/markdown-contrast.css">
+  <link rel="stylesheet" href="/css/article-reader.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Noto+Serif+SC:wght@400;500;600&display=swap" rel="stylesheet">
@@ -391,9 +406,8 @@ function renderMarkdown(content, theme) {
   ${mermaidRuntimeScript()}
 </head>
 <body class="markdown-page markdown-page-${markdownTheme}">
-  <div class="markdown-body markdown-theme-${markdownTheme}">
-    ${htmlContent}
-  </div>
+  ${articleReaderShell(htmlContent, `markdown-body markdown-theme-${markdownTheme}`, options.aiAnalysisEnabled !== false)}
+  <script src="/js/article-reader.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
@@ -537,7 +551,8 @@ function renderMermaid(content) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>goshare Mermaid查看器</title>
   ${viewerIcons()}
-  <script src="https://cdn.jsdelivr.net/npm/mermaid@11.6.0/dist/mermaid.min.js"></script>
+  <link rel="stylesheet" href="/css/article-reader.css">
+  ${mermaidRuntimeScript()}
   <style>
     body {
       font-family: 'Roboto', sans-serif;
@@ -564,28 +579,6 @@ function renderMermaid(content) {
       max-width: 100%;
       margin: 0 auto;
     }
-    pre.mermaid-code {
-      background-color: #f8f9fa;
-      border-radius: 4px;
-      padding: 15px;
-      overflow-x: auto;
-      margin: 15px 0;
-      border-left: 4px solid #4a6cf7;
-      display: none;
-    }
-    .toggle-code-btn {
-      background-color: #4a6cf7;
-      color: white;
-      border: none;
-      padding: 8px 16px;
-      border-radius: 4px;
-      cursor: pointer;
-      margin-bottom: 15px;
-      font-size: 14px;
-    }
-    .toggle-code-btn:hover {
-      background-color: #3a56d4;
-    }
     @media (prefers-color-scheme: dark) {
       body {
         background-color: #1a1a1a;
@@ -595,46 +588,17 @@ function renderMermaid(content) {
         background-color: #2a2a2a;
         box-shadow: 0 2px 10px rgba(0,0,0,0.3);
       }
-      pre.mermaid-code {
-        background-color: #333;
-        border-left: 4px solid #4a6cf7;
-      }
     }
   </style>
 </head>
 <body>
   <div class="mermaid-container">
     <h2>Mermaid 图表查看器</h2>
-    <button class="toggle-code-btn" onclick="toggleCode()">显示/隐藏代码</button>
-    <pre class="mermaid-code"><code>${escapedMermaidCode}</code></pre>
     <div class="mermaid">
 ${escapedMermaidCode}
     </div>
   </div>
-  <script>
-    mermaid.initialize({
-      startOnLoad: true,
-      securityLevel: 'loose',
-      theme: window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default',
-      logLevel: 'info',
-      flowchart: { useMaxWidth: true, htmlLabels: true },
-      sequence: { useMaxWidth: true },
-      gantt: { useMaxWidth: true },
-      er: { useMaxWidth: true },
-      pie: { useMaxWidth: true }
-    });
-    setTimeout(() => {
-      try {
-        mermaid.run({ nodes: document.querySelectorAll('.mermaid') });
-      } catch (error) {
-        console.error('Mermaid 图表渲染失败:', error);
-      }
-    }, 100);
-    function toggleCode() {
-      const codeBlock = document.querySelector('.mermaid-code');
-      codeBlock.style.display = codeBlock.style.display === 'block' ? 'none' : 'block';
-    }
-  </script>
+
 </body>
 </html>`;
 }
@@ -663,6 +627,9 @@ function buildMultiCodeBlockDocument(codeBlocks) {
 <head>
 <meta charset="UTF-8">
 <title>多代码块内容</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="/css/article-reader.css">
+${mermaidRuntimeScript()}
 <style>
 .code-block { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
 .code-block-header { font-weight: bold; margin-bottom: 10px; }
@@ -683,18 +650,18 @@ function preprocessMarkdown(content) {
 
 function isMermaidContent(code = '') {
   const mermaidPatterns = [
-    /^(graph|flowchart)\s+(TB|TD|BT|RL|LR)\b/m,
-    /^sequenceDiagram\b/m,
-    /^classDiagram\b/m,
-    /^stateDiagram(-v2)?\b/m,
-    /^erDiagram\b/m,
-    /^gantt\b/m,
-    /^pie\b/m,
-    /^journey\b/m,
-    /^gitGraph\b/m,
-    /^mindmap\b/m,
-    /^timeline\b/m,
-    /^C4Context\b/m,
+    /^(graph|flowchart)\s+(TB|TD|BT|RL|LR)\b/,
+    /^sequenceDiagram\b/,
+    /^classDiagram\b/,
+    /^stateDiagram(-v2)?\b/,
+    /^erDiagram\b/,
+    /^gantt\b/,
+    /^pie\b/,
+    /^journey\b/,
+    /^gitGraph\b/,
+    /^mindmap\b/,
+    /^timeline\b/,
+    /^C4Context\b/,
   ];
 
   return mermaidPatterns.some((pattern) => pattern.test(String(code).trim()));
@@ -702,9 +669,8 @@ function isMermaidContent(code = '') {
 
 function extractMermaidCode(content) {
   const trimmed = content.trim();
-  if (!trimmed.includes('```mermaid') && isMermaidContent(trimmed)) return trimmed;
-
-  const firstMatch = trimmed.match(/```mermaid\n([\s\S]+?)\n```/);
+  if (isMermaidContent(trimmed)) return trimmed;
+  const firstMatch = trimmed.match(/^```mermaid\b[^\r\n]*\r?\n([\s\S]+?)\r?\n```\s*$/i);
   if (firstMatch && firstMatch[1]) return firstMatch[1].trim();
 
   return trimmed;
@@ -723,65 +689,43 @@ function viewerIcons() {
 }
 
 function mermaidRuntimeScript() {
-  return `<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
-  <script>
-    document.addEventListener('DOMContentLoaded', function() {
-      const isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  return '<script src="/js/diagram-viewer.js" defer></script>';
+}
 
-      const convertMermaidCodeBlocks = function() {
-        const codeBlocks = document.querySelectorAll('pre code.language-mermaid');
-        codeBlocks.forEach(function(codeBlock, index) {
-          const code = codeBlock.textContent;
-          const pre = codeBlock.parentNode;
-          const mermaidDiv = document.createElement('div');
-          mermaidDiv.className = 'mermaid';
-          mermaidDiv.id = 'mermaid-converted-' + index;
-          mermaidDiv.textContent = code;
-          if (pre && pre.parentNode) pre.parentNode.replaceChild(mermaidDiv, pre);
-        });
-        return codeBlocks.length > 0;
-      };
-
-      try {
-        convertMermaidCodeBlocks();
-        mermaid.initialize({
-          startOnLoad: true,
-          securityLevel: 'loose',
-          theme: isDarkMode ? 'dark' : 'default',
-          flowchart: { useMaxWidth: true, htmlLabels: true },
-          sequence: { useMaxWidth: true },
-          gantt: { useMaxWidth: true },
-          er: { useMaxWidth: true },
-          pie: { useMaxWidth: true }
-        });
-
-        setTimeout(function renderMermaidElements() {
-          const hasNewCodeBlocks = convertMermaidCodeBlocks();
-          const mermaidElements = document.querySelectorAll('.mermaid');
-          let hasUnrenderedElements = hasNewCodeBlocks;
-
-          mermaidElements.forEach(function(el) {
-            if (el.querySelector('svg') === null && !el.classList.contains('mermaid-error')) {
-              hasUnrenderedElements = true;
-              try {
-                if (typeof mermaid.run === 'function') {
-                  mermaid.run({ nodes: [el] });
-                } else if (typeof mermaid.init === 'function') {
-                  mermaid.init(undefined, el);
-                }
-              } catch (err) {
-                console.error('Failed to render Mermaid diagram:', err);
-                el.innerHTML = '<pre>' + el.textContent + '</pre>';
-                el.classList.add('mermaid-error');
-              }
-            }
-          });
-
-          if (hasUnrenderedElements) setTimeout(renderMermaidElements, 1000);
-        }, 500);
-      } catch (error) {
-        console.error('Error initializing Mermaid:', error);
-      }
-    });
-  </script>`;
+function articleReaderShell(content, className, aiEnabled) {
+  return `
+  <div class="reader-toolbar" id="article-toolbar" hidden>
+    <button class="reader-button" id="article-outline-toggle" type="button" aria-controls="article-outline" aria-expanded="true">目录</button>
+    <button class="reader-button" id="article-map-open" type="button">思维导图</button>
+    <button class="reader-button" id="article-ai-analyze" type="button"${aiEnabled ? '' : ' disabled'}>AI 分析全文</button>
+    <button class="reader-button" id="article-heading-mode" type="button" hidden>标题目录</button>
+    <span id="article-node-count"></span>
+    <span id="article-ai-status" role="status">${aiEnabled ? '' : '当前环境未启用 AI 分析'}</span>
+    <progress id="article-progress" max="100" value="0" aria-label="阅读进度"></progress>
+  </div>
+  <div class="reader-layout outline-hidden">
+    <aside class="reader-outline" id="article-outline" aria-label="文章目录" hidden>
+      <h2>文章目录</h2>
+      <p id="article-ai-summary" hidden></p>
+      <input id="article-outline-search" type="search" placeholder="搜索章节…" aria-label="搜索文章目录">
+      <nav id="article-outline-list" aria-label="章节导航"></nav>
+      <p id="article-outline-empty" hidden>没有匹配的章节</p>
+    </aside>
+    <article class="${className}" data-article-content>${content}</article>
+  </div>
+  <dialog class="reader-map-dialog" id="article-map-dialog" aria-labelledby="article-map-title">
+    <header class="reader-map-header">
+      <div><h2 id="article-map-title">文章思维导图</h2><p id="article-map-caption"></p></div>
+      <button class="reader-button" id="article-map-close" type="button" aria-label="关闭思维导图">关闭</button>
+    </header>
+    <div class="reader-map-tools">
+      <button class="reader-button" type="button" data-map-zoom="-0.2" aria-label="缩小思维导图">−</button>
+      <span id="article-map-scale">100%</span>
+      <button class="reader-button" type="button" data-map-zoom="0.2" aria-label="放大思维导图">+</button>
+      <button class="reader-button" type="button" data-map-zoom="reset">重置</button>
+    </div>
+    <p class="reader-map-status" id="article-map-status" role="status"></p>
+    <div class="reader-map-viewport" id="article-map-viewport"><div class="reader-map-stage" id="article-map-stage"></div></div>
+    <details><summary>查看 Mermaid 源码</summary><pre><code id="article-map-source"></code></pre></details>
+  </dialog>`;
 }

@@ -2693,3 +2693,5 @@ label[for="html-file"] {
     text-align: left;
   }
 }
+/* Import warnings should not leave an empty card while hidden. */
+#docx-import-notice[hidden] { display: none !important; }
