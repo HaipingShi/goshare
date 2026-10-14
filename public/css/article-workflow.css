@@ -1,4 +1,4 @@
-#article-workflow-dialog { width: min(640px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow: auto; padding: 28px; border: 1px solid #cad5e4; border-radius: 18px; background: #fff; color: #233552; box-shadow: 0 24px 80px #101b3640; font-family: system-ui, sans-serif; }
+#article-workflow-dialog { margin: auto; width: min(640px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow: auto; padding: 28px; border: 1px solid #cad5e4; border-radius: 18px; background: #fff; color: #233552; box-shadow: 0 24px 80px #101b3640; font-family: system-ui, sans-serif; }
 #article-workflow-dialog::backdrop { background: #17233e9c; }
 #article-workflow-dialog [hidden], #workflow-review[hidden] { display: none !important; }
 .workflow-heading { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
