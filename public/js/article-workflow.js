@@ -1,6 +1,6 @@
 /* Upload → choices → evidence-based generation → preview → confirmation. */
 (() => {
-  function create({ getPayload, applyContent, renderPreview, setConfirmed, setTheme, aiEnabled }) {
+  function create({ getPayload, applyContent, renderPreview, setConfirmed, setTheme, aiEnabled, createShareLink }) {
     const dialog = document.getElementById('article-workflow-dialog');
     if (!dialog) return;
     const review = document.getElementById('workflow-review');
@@ -129,7 +129,7 @@
       if (step === 0 && getPayload().codeType === 'zip') { dialog.close(); return; }
       if (step < 2) showStep(step + 1);
       else if (step === 2) generate();
-      else { dialog.close(); review.hidden = true; setConfirmed(true); document.getElementById('workflow-summary').textContent = '预览已确认，可以生成分享链接'; }
+      else { dialog.close(); setConfirmed(true); createShareLink(); }
     });
     back.addEventListener('click', () => showStep(step - 1));
     function cancel() {
@@ -138,13 +138,15 @@
     }
     dialog.addEventListener('cancel', event => { event.preventDefault(); cancel(); });
     document.getElementById('workflow-close').addEventListener('click', cancel);
-    document.getElementById('workflow-confirm-preview').addEventListener('click', () => { showStep(5); dialog.showModal(); });
+    document.getElementById('workflow-confirm-preview').addEventListener('click', () => { setConfirmed(true); createShareLink(); });
+    document.getElementById('workflow-review-optimize').addEventListener('click', () => { profile = 'compact'; generate(true); });
     document.getElementById('workflow-edit-options').addEventListener('click', () => open(1));
     document.getElementById('workflow-optimize').addEventListener('click', () => { profile = 'compact'; generate(true); });
     document.getElementById('workflow-ai-open').addEventListener('click', () => open(1));
     document.getElementById('workflow-graphs-open').addEventListener('click', () => open(2));
     return {
       reviewPreview,
+      shareComplete() { review.hidden = true; document.getElementById('workflow-summary').textContent = '预览已确认，分享链接已生成'; },
       startFile(name, codeType) {
         cancel(); cached = undefined; cachedBase = ''; base = ''; profile = 'balanced';
         yes.checked = aiEnabled;

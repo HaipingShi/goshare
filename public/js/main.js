@@ -348,6 +348,7 @@ curl -X POST "${endpoint}" \\
     setConfirmed(value) { if (generateButton) generateButton.disabled = !value; },
     setTheme(value) { if (markdownThemeSelect) markdownThemeSelect.value = value; },
     aiEnabled: document.getElementById('article-workflow-dialog')?.dataset.aiEnabled === 'true',
+    createShareLink,
   });
 
   function invalidatePreview() {
@@ -1083,10 +1084,17 @@ curl -X POST "${endpoint}" \\
     });
   }
 
-  // 生成链接
-  if (generateButton) {
-    generateButton.addEventListener('click', async () => {
-      console.log('生成链接按钮被点击');
+  let creatingShare = false;
+  const sharePublisher = window.GoshareShare.createPublisher();
+  const shareDialog = document.getElementById('share-result-dialog');
+  const shareStatus = document.getElementById('share-result-status');
+  const shareContent = document.getElementById('share-result-content');
+  const shareRetry = document.getElementById('share-result-retry');
+  const shareCopy = document.getElementById('share-result-copy');
+  const shareInput = document.getElementById('share-html-url');
+  async function createShareLink() {
+      if (creatingShare) return;
+      // Publication always uses the exact content last previewed.
       // 确保从编辑器同步到textarea
       syncToTextarea();
       
@@ -1116,6 +1124,13 @@ curl -X POST "${endpoint}" \\
         return;
       }
 
+      const sharePreviewVersion = previewSequence;
+      creatingShare = true;
+      shareContent.hidden = true;
+      shareRetry.hidden = true;
+      shareCopy.textContent = '一键复制链接';
+      shareStatus.textContent = '正在生成分享链接，请稍候…';
+      if (!shareDialog.open) shareDialog.showModal();
       try {
         // 显示加载指示器
         loadingIndicator.classList.add('show');
@@ -1138,22 +1153,22 @@ curl -X POST "${endpoint}" \\
           bodyPayload.customSuffix = customSuffix.value;
         }
         
-        // 调用 API 生成链接
-        const response = await fetch('/api/v1/pages/create', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(bodyPayload),
-        });
-        
-        const data = await response.json();
-        console.log('API响应数据:', data); // 调试输出
-        
+        const data = await sharePublisher.publish(bodyPayload);
+
         if (data.success) {
           const cardUrl = data.cardUrl || data.url || `${window.location.origin}/share/${data.urlId}`;
           const viewUrl = data.viewUrl || `${window.location.origin}/view/${data.urlId}`;
           
+          shareInput.value = viewUrl;
+          document.getElementById('share-result-open').href = viewUrl;
+          const passwordNote = document.getElementById('share-result-password');
+          passwordNote.hidden = !isProtected;
+          passwordNote.textContent = isProtected ? `访问密码：${data.password}` : '';
+          shareContent.hidden = false;
+          shareStatus.textContent = previewSequence === sharePreviewVersion ? '分享链接已生成。可一键复制，或打开正文页面。' : '此前确认的内容已生成分享链接。当前修改请重新预览后确认。';
+          if (!shareDialog.open) shareDialog.showModal();
+          if (previewSequence === sharePreviewVersion) workflow?.shareComplete();
+
           // 格式化 URL 显示
           const formattedUrl = formatUrl(cardUrl);
           if (resultUrl) {
@@ -1177,7 +1192,6 @@ curl -X POST "${endpoint}" \\
           if (generatedPassword) {
             generatedPassword.textContent = data.password;
           }
-          console.log('生成的密码:', data.password); // 调试输出
           
           // 根据开关状态显示或隐藏密码区域
           if (passwordToggle && passwordToggle.checked) {
@@ -1231,12 +1245,14 @@ curl -X POST "${endpoint}" \\
         
         // 恢复按钮状态
         generateButton.innerHTML = '<i class="fas fa-link mr-1"></i>确认生成';
-        generateButton.disabled = false;
+        if (previewSequence === sharePreviewVersion) generateButton.disabled = false;
         
         // 隐藏加载指示器
         loadingIndicator.classList.remove('show');
       } catch (error) {
-        console.error('生成链接错误:', error);
+        shareStatus.textContent = error.message || '生成分享链接失败，请重试。';
+        shareRetry.hidden = false;
+        console.error('生成链接错误:', error?.name || 'Error');
         
         // 如果是 ZIP 文件的校验提示，使用警告弹窗展示，方便用户阅读；否则展示 toast
         const msg = error.message || '生成链接时发生错误';
@@ -1248,14 +1264,30 @@ curl -X POST "${endpoint}" \\
         
         // 恢复按钮状态
         generateButton.innerHTML = '<i class="fas fa-link mr-1"></i>确认生成';
-        generateButton.disabled = false;
+        if (previewSequence === sharePreviewVersion) generateButton.disabled = false;
         
         // 隐藏加载指示器
         loadingIndicator.classList.remove('show');
-      }
-    });
+      } finally { creatingShare = false; }
   }
-  
+  generateButton?.addEventListener('click', createShareLink);
+  document.getElementById('share-result-close').addEventListener('click', () => shareDialog.close());
+  shareRetry.addEventListener('click', createShareLink);
+  shareCopy.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(shareInput.value);
+      shareCopy.textContent = '已复制链接';
+      shareStatus.textContent = '正文 HTML 链接已复制。';
+    } catch {
+      // Selecting the visible input also works when clipboard permission is denied.
+      shareInput.focus();
+      shareInput.select();
+      const copied = document.execCommand('copy');
+      shareCopy.textContent = copied ? '已复制链接' : '一键复制链接';
+      shareStatus.textContent = copied ? '正文 HTML 链接已复制。' : '自动复制未获允许，链接已选中，请手动复制。';
+    }
+  });
+
   // 复制链接按钮 - 只复制链接
   if (copyButton) {
     copyButton.addEventListener('click', () => {

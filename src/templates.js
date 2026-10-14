@@ -173,7 +173,7 @@ function chromeEnd({ includeMain = true, includeAdminLink = false, includeAdmin 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/html.min.js"></script>
   <script src="/js/theme.js"></script>
   <script src="/js/particles-config.js"></script>
-  ${includeMain ? '<script src="/js/article-graphs.js"></script><script src="/js/article-workflow.js"></script><script src="/js/main.js?v=workflow-v2"></script><script src="/js/syntax-highlight.js"></script>' : ''}
+  ${includeMain ? '<script src="/js/article-graphs.js"></script><script src="/js/article-workflow.js"></script><script src="/js/share-publisher.js"></script><script src="/js/main.js?v=share-confirm-v1"></script><script src="/js/syntax-highlight.js"></script>' : ''}
   ${includeAdmin ? '<script src="/js/admin.js?v=cloudflare"></script>' : ''}
 </body>
 </html>`;
@@ -291,6 +291,17 @@ export function renderIndexPage(env) {
       <div class="workflow-actions"><button id="workflow-back" class="workflow-btn">上一步</button><button id="workflow-next" class="workflow-btn primary">继续</button></div>
     </dialog>
     <p id="workflow-summary" role="status"></p>
+    <dialog id="share-result-dialog" aria-labelledby="share-result-title">
+      <div class="workflow-heading"><h2 id="share-result-title">生成分享链接</h2><button id="share-result-close" class="workflow-btn" aria-label="关闭分享链接弹窗">关闭</button></div>
+      <p id="share-result-status" role="status" aria-live="polite"></p>
+      <div id="share-result-content" hidden>
+        <label for="share-html-url">正文 HTML 分享链接</label>
+        <input id="share-html-url" readonly type="url" aria-label="正文 HTML 分享链接">
+        <div class="workflow-actions"><button id="share-result-copy" class="workflow-btn primary">一键复制链接</button><a id="share-result-open" class="workflow-btn" target="_blank" rel="noopener">打开页面</a></div>
+        <p id="share-result-password" class="workflow-note" hidden></p>
+      </div>
+      <button id="share-result-retry" class="workflow-btn primary" hidden>重试生成链接</button>
+    </dialog>
     <div id="result-section" class="card result-card" style="display: none;" aria-live="polite">
       <h3 class="section-title" style="color: var(--primary); font-family: 'Orbitron', sans-serif; margin-bottom: 1rem;">链接已生成</h3>
       <div id="result-meta" class="result-meta" style="display: none;"></div>
@@ -353,7 +364,7 @@ export function renderIndexPage(env) {
           </button>
         </div>
       </div>
-      <div id="workflow-review" hidden><p>请核对正文、表格、图片和图形。确认后再生成分享链接。</p><p id="workflow-graph-note"></p><button id="workflow-confirm-preview" class="workflow-btn primary">确认预览</button> <button id="workflow-edit-options" class="workflow-btn">修改分析与图形选项</button></div>
+      <div id="workflow-review" hidden><p>请核对正文、表格、图片和图形。确认后生成分享链接。</p><p id="workflow-graph-note"></p><button id="workflow-confirm-preview" class="workflow-btn primary">确认预览并生成分享链接</button> <button id="workflow-review-optimize" class="workflow-btn">美观优化并重新预览</button> <button id="workflow-edit-options" class="workflow-btn">修改分析与图形选项</button></div>
       <iframe id="render-preview-frame" class="render-preview-frame" title="渲染预览" sandbox="allow-scripts"></iframe>
     </div>
     <div class="card instructions-card">
