@@ -78,7 +78,7 @@ export function validateArticleDiagrams(input, blocks, kinds) {
     if (!Array.isArray(graph.nodes) || !graph.nodes.length || graph.nodes.length > 12 || !Array.isArray(graph.edges) || graph.edges.length > 18) throw new Error('AI 关系图大小或格式无效。');
     const ids = new Set();
     const nodes = graph.nodes.map(node => {
-      if (!node || !/^n\d+$/.test(node.id) || ids.has(node.id) || !references.has(node.blockId) || typeof node.title !== 'string' || !node.title.trim()) throw new Error('AI 图形节点引用无效。');
+      if (!node || typeof node.id !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,31}$/.test(node.id) || ids.has(node.id) || !references.has(node.blockId) || typeof node.title !== 'string' || !node.title.trim()) throw new Error('AI 图形节点引用无效。');
       ids.add(node.id);
       return { id: node.id, title: node.title.trim().slice(0, 60), blockId: node.blockId };
     });

@@ -35,6 +35,16 @@ test('diagram schema rejects invented node IDs and evidence while supporting hon
   assert.match(buildRelationGraph(graph), /n0 -->\|"处理"\| n1/);
 });
 
+test('relation graphs accept bounded symbolic IDs and still reject unsafe or duplicate IDs', () => {
+  const architecture = { ...graph, kind: 'architecture', nodes: graph.nodes.map((node, i) => ({ ...node, id: `a${i + 1}` })), edges: [{ ...graph.edges[0], from: 'a1', to: 'a2' }] };
+  const validated = validateArticleDiagrams([architecture], blocks, ['architecture'])[0];
+  assert.equal(validated.nodes[0].id, 'a1');
+  assert.match(buildRelationGraph(validated), /n0 -->\|"处理"\| n1/);
+  for (const id of ['a1', 'bad\" --> injected', 'x'.repeat(33)]) {
+    assert.throws(() => validateArticleDiagrams([{ ...architecture, nodes: [architecture.nodes[0], { ...architecture.nodes[1], id }] }], blocks, ['architecture']));
+  }
+});
+
 test('generated analysis and graphs survive DOCX sanitization and remain separate from original evidence', async () => {
   const original = '<h1>文档处理</h1><p>上传文档，然后解析并存储。</p><table><tr><td>解析结果</td><td>对象存储</td></tr></table><p><img alt="结构示意" src="data:image/png;base64,YQ==" /></p>';
   const content = composeArticle(original, { ...analysis, diagrams: [graph] }, ['mindmap', 'flowchart']);
