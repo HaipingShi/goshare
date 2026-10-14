@@ -120,3 +120,76 @@ test('API uses success-only quotas, meters generic beautification, and exposes b
   assert.equal(state.quotas.ai.remaining, 49);
   assert.equal(state.quotas.aiBudget.used, 4);
 });
+
+const relationGraph = kind => ({ kind, title: '文档处理', nodes: [
+  { id: 'n1', title: '理解问题', blockId: 'block-1' }, { id: 'n2', title: '实践复盘', blockId: 'block-2' },
+], edges: [{ from: 'n1', to: 'n2', blockId: 'block-2' }] });
+const diagramRequest = () => request({ blocks, diagramKinds: ['mindmap', 'flowchart', 'architecture'] });
+
+test('missing relation diagrams receive one bounded completion; only the complete operation charges personal quota', async () => {
+  let calls = 0;
+  const { env } = environment({ DAILY_AI_LIMIT: '1', AI: { async run(model, options) {
+    calls++;
+    if (calls === 2) assert.match(options.messages[1].content, /Do not repeat the outline/);
+    return { response: JSON.stringify(calls === 1 ? { ...analysis, diagrams: [] } : { diagrams: [relationGraph('flowchart'), relationGraph('architecture')] }), usage: { neurons: calls === 1 ? 3 : 5 } };
+  } } });
+  const result = await (await worker.fetch(diagramRequest(), env)).json();
+  assert.equal(result.success, true);
+  assert.equal(calls, 2);
+  assert.deepEqual(result.analysis.nodes, analysis.nodes);
+  assert.deepEqual(result.analysis.diagrams.map(g => g.kind), ['flowchart', 'architecture']);
+  assert.equal(result.quota.used, 1);
+  assert.equal(result.budget.used, 8);
+  assert.equal(result.budget.reserved, 0);
+});
+
+test('completion failure cannot loop or debit personal quota', async () => {
+  let calls = 0;
+  const { env } = environment({ DAILY_AI_LIMIT: '50', AI: { async run() {
+    calls++; return { response: JSON.stringify({ ...analysis, diagrams: [] }), usage: { neurons: 4 } };
+  } } });
+  const response = await worker.fetch(diagramRequest(), env);
+  assert.equal(response.status, 502);
+  assert.equal(calls, 2);
+  const state = await (await worker.fetch(new Request('https://example.com/api/v1/quota'), env)).json();
+  assert.equal(state.quotas.ai.used, 0);
+  assert.equal(state.quotas.ai.reserved, 0);
+  assert.equal(state.quotas.aiBudget.used, 8);
+});
+
+test('completion cannot bypass the whole-site budget', async () => {
+  let calls = 0;
+  const { env } = environment({ DAILY_AI_LIMIT: '50', DAILY_AI_NEURON_BUDGET: '1000', AI: { async run() {
+    calls++; return { response: JSON.stringify({ ...analysis, diagrams: [] }), usage: { neurons: 999 } };
+  } } });
+  const response = await worker.fetch(diagramRequest(), env);
+  const result = await response.json();
+  assert.equal(response.status, 429);
+  assert.equal(result.error.code, 'AI_BUDGET_EXCEEDED');
+  assert.equal(result.quota.used, 0);
+  assert.equal(calls, 1);
+});
+
+test('invalid evidence, truncated and malformed responses are never blindly retried', async () => {
+  const invalid = relationGraph('flowchart'); invalid.nodes[0].blockId = 'block-999';
+  for (const result of [
+    { response: JSON.stringify({ ...analysis, diagrams: [invalid, relationGraph('architecture')] }) },
+    { choices: [{ finish_reason: 'length', message: { content: '{"secret":"must never be logged' } }] },
+    { response: '{broken' },
+  ]) {
+    let calls = 0;
+    const { env } = environment({ AI: { async run() { calls++; return result; } } });
+    const response = await worker.fetch(diagramRequest(), env);
+    assert.equal(response.status, 502);
+    assert.equal(calls, 1);
+    assert(!(await response.text()).includes('must never be logged'));
+  }
+});
+
+test('the complete prompt schema includes every selected graph and never directs empty graphs', () => {
+  const prompt = buildArticleAnalysisPrompt(blocks, ['flowchart', 'architecture']);
+  assert.match(prompt, /exactly 2 objects/);
+  assert.match(prompt, /"diagrams":\[\{"kind":"flowchart"/);
+  assert.match(prompt, /"kind":"architecture"/);
+  assert(!prompt.includes('Additionally return "diagrams": []'));
+});

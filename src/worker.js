@@ -2,7 +2,7 @@ import { extractArticleSource } from './article-source.js';
 import { AiQuotaError, getAiUsage, runMeteredAi } from './ai-quota.js';
 import * as fflate from 'fflate';
 import { sanitizeDocxContent } from './docx-content.js';
-import { validateArticleBlocks, buildArticleAnalysisPrompt, validateArticleAnalysis, validateDiagramKinds, validateArticleDiagrams, ARTICLE_PROMPT_VERSION } from './article-analysis.js';
+import { validateArticleBlocks, buildArticleAnalysisPrompt, buildArticleDiagramRepairPrompt, MissingArticleDiagramsError, validateArticleAnalysis, validateDiagramKinds, validateArticleDiagrams, ARTICLE_PROMPT_VERSION } from './article-analysis.js';
 import {
   renderErrorPage,
   renderAdminPage,
@@ -1141,28 +1141,70 @@ async function analyzeArticle(request, env) {
   }
   try {
     const model = String(env.AI_BEAUTIFY_MODEL || DEFAULT_BEAUTIFY_MODEL);
-    const result = await runMeteredAi(env, `ai:${await getSubmitterKey(request, env)}`, model, {
-      messages: [
-        { role: 'system', content: 'You analyze articles into evidence-grounded semantic trees. Return only valid JSON.' },
-        { role: 'user', content: buildArticleAnalysisPrompt(blocks, diagramKinds.filter(kind => kind !== 'mindmap')) },
-      ],
-      temperature: 0.2,
-      max_completion_tokens: diagramKinds.some(kind => kind !== 'mindmap') ? 6144 : 4096,
-      response_format: { type: 'json_object' },
-      chat_template_kwargs: { enable_thinking: false },
-    }, aiResult => {
-      const parsed = JSON.parse(stripMarkdownFence(extractAiText(aiResult)));
-      const analysis = validateArticleAnalysis(parsed, blocks);
-      analysis.diagrams = diagramKinds.some(kind => kind !== 'mindmap') ? validateArticleDiagrams(parsed.diagrams, blocks, diagramKinds) : [];
-      analysis.promptVersion = ARTICLE_PROMPT_VERSION;
-      return analysis;
-    });
+    const scope = `ai:${await getSubmitterKey(request, env)}`;
+    const relations = diagramKinds.filter(kind => kind !== 'mindmap');
+    let candidate, stage = 'model';
+    const validate = aiResult => {
+      stage = 'json';
+      const parsed = parseArticleAiResult(aiResult);
+      stage = 'outline';
+      candidate = validateArticleAnalysis(parsed, blocks);
+      stage = 'diagrams';
+      candidate.diagrams = relations.length ? validateArticleDiagrams(parsed.diagrams, blocks, relations) : [];
+      candidate.promptVersion = ARTICLE_PROMPT_VERSION;
+      return candidate;
+    };
+    let result;
+    try {
+      result = await runMeteredAi(env, scope, model, {
+        messages: [
+          { role: 'system', content: 'You analyze articles into evidence-grounded semantic trees. Return only valid JSON.' },
+          { role: 'user', content: buildArticleAnalysisPrompt(blocks, relations) },
+        ],
+        temperature: 0.2,
+        max_completion_tokens: diagramKinds.some(kind => kind !== 'mindmap') ? 6144 : 4096,
+        response_format: { type: 'json_object' },
+        chat_template_kwargs: { enable_thinking: false },
+      }, validate);
+    } catch (error) {
+      if (!(error instanceof MissingArticleDiagramsError) || !candidate) {
+        console.error('AI article analysis stage failed:', stage, error.articleResultCode || error.code || error.name);
+        throw error;
+      }
+      // Only a valid outline with omitted graph kinds can trigger one completion.
+      // The first incomplete result refunds its personal slot; both attempts are
+      // charged to the global compute budget by the same meter. Never loop.
+      console.info('AI article diagrams completion:', relations.join(','));
+      result = await runMeteredAi(env, scope, model, {
+        messages: [
+          { role: 'system', content: 'Produce only the requested evidence-grounded relation diagrams as valid JSON.' },
+          { role: 'user', content: buildArticleDiagramRepairPrompt(blocks, relations) },
+        ],
+        temperature: 0.1, max_completion_tokens: 4096,
+        response_format: { type: 'json_object' }, chat_template_kwargs: { enable_thinking: false },
+      }, aiResult => ({ ...candidate, diagrams: validateArticleDiagrams(parseArticleAiResult(aiResult).diagrams, blocks, relations), promptVersion: ARTICLE_PROMPT_VERSION }));
+    }
     return jsonResponse({ success: true, analysis: result.value, quota: result.quota, budget: result.budget });
   } catch (error) {
     if (error instanceof AiQuotaError) return aiQuotaErrorResponse(error);
-    console.error('AI article analysis failed:', error?.name || 'Error');
-    return apiErrorResponse({ code: 'AI_ANALYSIS_FAILED', message: 'AI 分析暂未返回有效结果，本次不扣 AI 次数，请稍后重试。', status: 502, retryable: true });
+    console.error('AI article analysis failed:', error?.articleResultCode || error?.code || error?.name || 'Error');
+    return apiErrorResponse({ code: error.articleResultCode || 'AI_ANALYSIS_FAILED', message: error.articleResultMessage ||
+      (error instanceof MissingArticleDiagramsError ? 'AI 未能返回全部所选图形，本次不扣 AI 次数。可减少图形选项后重试。' : 'AI 分析结果未通过原文引用或结构校验，本次不扣 AI 次数，请重试。'), status: 502, retryable: true });
   }
+}
+
+function parseArticleAiResult(result) {
+  const fail = (code, message) => {
+    const error = new Error(code);
+    error.articleResultCode = code;
+    error.articleResultMessage = `${message}本次不扣 AI 次数。`;
+    throw error;
+  };
+  if (result?.choices?.some(choice => choice.finish_reason === 'length')) fail('AI_RESPONSE_TRUNCATED', 'AI 输出被截断，请减少图形选项后重试。');
+  const raw = stripMarkdownFence(extractAiText(result));
+  if (!raw.trim()) fail('AI_RESPONSE_EMPTY', 'AI 未返回内容，请稍后重试。');
+  try { return JSON.parse(raw); }
+  catch { fail('AI_RESPONSE_INVALID_JSON', 'AI 返回格式不完整，请重试。'); }
 }
 
 async function listRecentPages(request, env) {
